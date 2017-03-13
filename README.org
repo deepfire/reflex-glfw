@@ -1,0 +1,26 @@
+* reflex-glfw
+*** Home
+
+    The home of =reflex-glfw= is at it Github page: https://github.com/deepfire/reflex-glfw
+
+*** Reflex 0.5
+
+    /reflex-glfw/ depends on a pre-release version of =reflex=, which means having
+    to jump through extra hoops to use /reflex-glfw/.
+
+***** Installing via Nix
+      By far the easiest and most reliable way to do this is to employ the /Nix/
+      package manager, which, unless you already have it, has to be installed
+      first, of course:
+
+      - https://nixos.org/nix/
+
+*** Building the demo
+
+    Once you have /Nix/ installed, building the demo is as easy as:
+
+    #+BEGIN_QUOTE sh
+    nix-shell --no-build-output
+    cabal build
+    dist/build/reflex-glfw-demo/reflex-glfw-demo
+    #+END_QUOTE
