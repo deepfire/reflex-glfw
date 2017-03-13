@@ -1,4 +1,5 @@
-{ nixpkgs     ? import <nixpkgs> {}
+{ nixpkgs     ? import ./nixpkgs {}
+#, nixpkgs     ? import <nixpkgs> {}
 , pkgs        ? nixpkgs.pkgs, haskell ? pkgs.haskell
 , compiler    ? "ghc801"
 , ghcOrig     ? pkgs.haskell.packages."${compiler}"
