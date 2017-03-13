@@ -1,5 +1,6 @@
 ---
 --- This engages Reflex.GLFW for a reinterpretation of https://github.com/bsl/GLFW-b-demo/blob/master/src/Main.hs
+--- which is the source for all of the non-FRP code of the demo.
 ---
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DataKinds #-}

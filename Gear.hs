@@ -1,3 +1,7 @@
+--
+-- This file originally comes from GLFW-b-demo:
+--   https://github.com/bsl/GLFW-b-demo/blob/master/src/Gear.hs
+--
 module Gear
   ( makeGear
   ) where
