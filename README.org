@@ -1,7 +1,13 @@
 * reflex-glfw
-*** Home
+*** What
 
-    The home of =reflex-glfw= is at it Github page: https://github.com/deepfire/reflex-glfw
+    =reflex-glfw= is an adapter between [[https://github.com/reflex-frp/reflex][Reflex]], a [[http://www.haskell.org/][Haskell]] FRP framework and
+    [[https://github.com/bsl/GLFW-b][GLFW-b]], a set of [[http://www.glfw.org/][GLFW]] bindings.
+
+*** Where
+
+    The home of =reflex-glfw= is at its Github page:
+    https://github.com/deepfire/reflex-glfw
 
 *** Reflex 0.5
 
@@ -19,8 +25,10 @@
 
     Once you have /Nix/ installed, building the demo is as easy as:
 
-    #+BEGIN_QUOTE sh
+    #+BEGIN_SRC sh
+    # First, enter the fixed environment (NOTE: this can take a while):
     nix-shell --no-build-output
+    # ..then, inside the shell:
     cabal build
     dist/build/reflex-glfw-demo/reflex-glfw-demo
-    #+END_QUOTE
+    #+END_SRC
