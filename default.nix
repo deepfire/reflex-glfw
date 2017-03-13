@@ -1,6 +1,6 @@
-{ mkDerivation, base, base-unicode-symbols, clock, dependent-sum
-, GLFW-b, lens, mtl, OpenGL, OpenGLRaw, pretty, reflex, semigroups
-, stdenv, stm, transformers
+{ mkDerivation, base, base-unicode-symbols, dependent-sum, GLFW-b
+, lens, mtl, OpenGL, OpenGLRaw, pretty, reflex, stdenv, stm
+, transformers
 }:
 mkDerivation {
   pname = "reflex-glfw";
@@ -9,14 +9,14 @@ mkDerivation {
   isLibrary = true;
   isExecutable = true;
   libraryHaskellDepends = [
-    base base-unicode-symbols clock dependent-sum GLFW-b lens mtl
-    OpenGLRaw reflex semigroups stm transformers
+    base base-unicode-symbols dependent-sum GLFW-b lens mtl OpenGLRaw
+    pretty reflex stm transformers
   ];
   executableHaskellDepends = [
-    base base-unicode-symbols clock dependent-sum GLFW-b lens mtl
-    OpenGL OpenGLRaw pretty reflex semigroups stm transformers
+    base base-unicode-symbols dependent-sum GLFW-b lens mtl OpenGL
+    OpenGLRaw pretty reflex stm transformers
   ];
-  homepage = "https://github.com/deepfire/reflex-glfw";
+  homepage = "https://github.com/deepfire/reflex-glfw/";
   description = "A GLFW-b adapter for Reflex FRP";
   license = stdenv.lib.licenses.bsd3;
 }
