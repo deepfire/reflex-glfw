@@ -246,7 +246,7 @@ demoGuest win setupE windowFrameE inputE = do
   hold False =<< (performEvent $ (const $ liftIO $ GLFW.windowShouldClose win) <$> inputE)
 
 main ∷ IO ()
-main = withGLWindow 640 480 "GLFW-b-demo" $
+main = withGLWindow 640 480 "reflex-glfw-demo" $
   \win → do
     host win demoGuest
     putStrLn "ended!"
