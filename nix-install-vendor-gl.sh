@@ -44,6 +44,7 @@ EOF
 ### Argument defaults
 ###
 default_operation='install-vendor-gl'
+run_opengl_driver='/run/opengl-driver'
 
 arg_system_glxinfo='/usr/bin/glxinfo'
 arg_nix_glxinfo=${HOME}'/.nix-profile/bin/glxinfo'
@@ -193,17 +194,17 @@ glxinfo_field() {
 ### query Nix 'glxinfo'
 nix_vendorgl_server_string=`glxinfo_field ${arg_nix_glxinfo} 'server glx vendor string'`
 nix_vendorgl_client_string=`glxinfo_field ${arg_nix_glxinfo} 'client glx vendor string'`
-  nix_opengl_version_string=`glxinfo_field ${arg_nix_glxinfo} 'OpenGL version string'`
-          nix_opengl_broken=`${arg_nix_glxinfo} >/dev/null 2>&1 && echo no || echo yes`
+ nix_opengl_version_string=`glxinfo_field ${arg_nix_glxinfo} 'OpenGL version string'`
+         nix_opengl_broken=`${arg_nix_glxinfo} >/dev/null 2>&1 && echo no || echo yes`
 
 ### query system 'glxinfo'
 system_glxinfo_deplib_path() {
 	ldd ${arg_system_glxinfo} | grep "^[[:space:]]*$1 => " | cut -d ' ' -f3; }
- system_vendorgl_server_string=`glxinfo_field ${arg_system_glxinfo} 'server glx vendor string'`
- system_vendorgl_client_string=`glxinfo_field ${arg_system_glxinfo} 'client glx vendor string'`
-   system_opengl_version_string=`glxinfo_field ${arg_system_glxinfo} 'OpenGL version string'`
-             system_libgl1_path=`system_glxinfo_deplib_path 'libGL.so.1'`
-           system_opengl_broken=`${arg_system_glxinfo} >/dev/null 2>&1 && echo no || echo yes`
+   system_vendorgl_server_string=`glxinfo_field ${arg_system_glxinfo} 'server glx vendor string'`
+   system_vendorgl_client_string=`glxinfo_field ${arg_system_glxinfo} 'client glx vendor string'`
+  system_vendorgl_version_string=`glxinfo_field ${arg_system_glxinfo} 'OpenGL version string'`
+              system_libgl1_path=`system_glxinfo_deplib_path 'libGL.so.1'`
+          system_vendorgl_broken=`${arg_system_glxinfo} >/dev/null 2>&1 && echo no || echo yes`
 compute_system_vendorgl_kind() {
 	case "${system_vendorgl_client_string}" in
 	     "NVIDIA Corporation" ) echo "nvidia";;
@@ -213,7 +214,7 @@ compute_system_vendorgl_kind() {
           system_vendorgl_kind=`compute_system_vendorgl_kind`
    compute_system_vendorgl_version() {
 	   case $system_vendorgl_kind in
-		   nvidia ) echo ${system_opengl_version_string} | cut -d ' ' -f3;; esac; }
+		   nvidia ) echo ${system_vendorgl_version_string} | cut -d ' ' -f3;; esac; }
        system_vendorgl_version=`compute_system_vendorgl_version`
 
 dump() {
@@ -226,8 +227,8 @@ arg_nix_glxinfo:                  ${arg_nix_glxinfo}
 
 server GLX vendor:                ${system_vendorgl_server_string}
 client GLX vendor:                ${system_vendorgl_client_string}
-system GL version string:         ${system_opengl_version_string}
-system GL broken:                 ${system_opengl_broken}
+system GL version string:         ${system_vendorgl_version_string}
+system GL broken:                 ${system_vendorgl_broken}
 system GL kind:                   ${system_vendorgl_kind}
 system GL version number:         ${system_vendorgl_version}
 
@@ -243,14 +244,20 @@ EOF
 if test ! -z "${arg_verbose}${arg_dump_and_exit}"
 then dump
      if test ! -z "${arg_dump_and_exit}"
-     then exit 0; fi; fi
+     then return 0; fi; fi
 
 ### Main functionality.
 ###
 test "${nix_opengl_broken}" = "yes" || {
 	info "Nix-available GL seems to be okay (according to glxinfo exit status)."
-	exit 0; }
-test "${system_opengl_broken}" = "no" || {
+	return 0; }
+test ! -f ${run_opengl_driver}/lib/libGL.so.1 ||
+	! (LD_LIBRARY_PATH=${run_opengl_driver}/lib ${arg_nix_glxinfo} >/dev/null 2>&1) || {
+	info "A global libGL.so.1 already seems to be installed at ${run_opengl_driver}/lib/libGL.so.1, and it appears to be sufficient for the Nix 'glxinfo'.\n\n  export LD_LIBRARY_PATH=${run_opengl_driver}/lib\n"
+	export LD_LIBRARY_PATH=${run_opengl_driver}/lib
+	return 0; }
+	
+test "${system_vendorgl_broken}" = "no" || {
 	${arg_system_glxinfo}
 	fail "System-wide GL appear to be broken (according to glxinfo exit status),\nnot much can be done."; }
 # test -f "${system_libgl1_path}" ||
@@ -352,17 +359,17 @@ in buildEnv { name = "opengl-drivers"; paths = [ vendorgl ]; }
 EOF
 	fi
 
-	sudo NIX_PATH=nixpkgs=${arg_nixpkgs} ${nix_build} ${tmpnix} -o /run/opengl-driver
+	sudo NIX_PATH=nixpkgs=${arg_nixpkgs} ${nix_build} ${tmpnix} -o ${run_opengl_driver}
 	rm -f ${tmpnix}
 
 	cat <<EOF
-Nix-compatible vendor GL driver is now installed at /run/opengl-driver
+Nix-compatible vendor GL driver is now installed at ${run_opengl_driver}
 
 To make them available to Nix-build applications you can now issue:
 
-   export LD_LIBRARY_PATH=/run/opengl-driver/lib
+   export LD_LIBRARY_PATH=${run_opengl_driver}/lib
 
 (Doing the export, in case you have sourced the file directly.)
 EOF
-	export LD_LIBRARY_PATH=/run/opengl-driver/lib
+	export LD_LIBRARY_PATH=${run_opengl_driver}/lib
 	;; esac
