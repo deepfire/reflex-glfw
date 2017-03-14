@@ -53,3 +53,7 @@
 
     Adding support for other GPU vendors shouldn't be very hard -- all the
     infrastructure is there.
+
+* Screenshot
+
+  [[./screenshot.png]]
