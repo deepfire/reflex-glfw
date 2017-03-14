@@ -15,9 +15,8 @@
 module Main (main) where
 
 -- TODO:
---  1. fix the one-event-per-frame consumption issue
---  2. wire in event printing
---  3. close the XXX's
+--  1. wire in event printing
+--  2. close the XXX's
 --
 
 import Control.Arrow             ((***))
@@ -39,8 +38,8 @@ import qualified Graphics.Rendering.OpenGL         as GL
 import qualified Graphics.UI.GLFW                  as GLFW
 import qualified System.IO                         as Sys
 
-import Reflex
-import Reflex.GLFW
+import           Reflex
+import           Reflex.GLFW                       as RGL
 
 import Gear (makeGear)
 
@@ -246,10 +245,16 @@ demoGuest win setupE windowFrameE inputE = do
   hold False =<< (performEvent $ (const $ liftIO $ GLFW.windowShouldClose win) <$> inputE)
 
 main ∷ IO ()
-main = withGLWindow 640 480 "reflex-glfw-demo" $
-  \win → do
-    host win demoGuest
-    putStrLn "ended!"
+main = do
+  success ← RGL.init
+  unless success $
+    error "GLFW failed to initialise GL."
+
+  -- No special GL.windowHint -ing is required for this demo, so just proceeding as-is.
+  RGL.withGLWindow 640 480 "reflex-glfw-demo" $
+    \win → do
+      RGL.host win demoGuest
+      putStrLn "ended!"
 
 
 processEvent ∷ ReflexGLFWCtx t m ⇒ Event t InputU → m (Event t ())

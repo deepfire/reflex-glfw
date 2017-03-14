@@ -18,6 +18,7 @@
 module Reflex.GLFW
   ( ReflexGLFW, ReflexGLFWCtx
   -- * GL window management
+  , init
   , withGLWindow, defaultGLWindowSetup
   -- * Non-event-driven input sampling
   , JoystickSample(..), sampleJoystick
@@ -43,13 +44,13 @@ module Reflex.GLFW
   )
 where
 
-import           Prelude                            hiding (Char)
+import           Prelude                            hiding (Char, init)
 import qualified Prelude                            as Prelude
 import           Prelude.Unicode
 
 import qualified Control.Concurrent.STM             as STM (TQueue, atomically, newTQueueIO, tryReadTQueue, writeTQueue)
 import           Control.Lens
-import           Control.Monad                             (unless, when)
+import           Control.Monad                             (unless)
 import           Control.Monad.Fix                         (MonadFix)
 import           Control.Monad.Identity                    (Identity(..))
 import           Control.Monad.IO.Class                    (MonadIO, liftIO)
@@ -58,6 +59,7 @@ import           Data.Dependent.Sum                        (DSum ((:=>)))
 
 import qualified Graphics.GL.Core33                 as GL
 import qualified "GLFW-b" Graphics.UI.GLFW          as GL
+import qualified System.IO                          as Sys
 
 import           Reflex
 import           Reflex.Host.Class                         (newEventWithTriggerRef)
@@ -90,32 +92,46 @@ type ReflexGLFWCtx t m = (Reflex t, MonadHold t m, MonadFix m, MonadIO m, MonadA
 
 -- * GL window management
 --
+errormsgIO ∷ String → IO ()
+errormsgIO = Sys.hPutStrLn Sys.stderr
+
+errormsg ∷ (MonadIO m) ⇒ String → m ()
+errormsg = liftIO ∘ errormsgIO
+
+simpleErrorPrinter ∷ GL.ErrorCallback
+simpleErrorPrinter e s =
+  errormsg $ unwords [show e, show s]
+
+-- | This function initialises 'Reflex.GLFW' and returns 'False' upon failure.
+--
+--   If it succeeds, we might follow with setting GL window hints as/if needed,
+--   using regular 'GLFW-b' API, like 'GLFW.windowHint'.
+--
+--   Then, proceed with running our FRP network using a call to 'host', nested
+--   inside the 'withGLWindow' context bracket.
+init ∷ (MonadIO m) ⇒ m Bool
+init = liftIO $ do
+  GL.setErrorCallback $ Just simpleErrorPrinter
+  GL.init
+
 -- | GLFW-b is made to be very close to the C API, so creating a window is pretty
 --   clunky by Haskell standards.  A higher-level API would have some function
 --   like 'withWindow'.
+--
+--   NOTE: 'init' must be called before this function.
 withGLWindow ∷ (MonadIO m) ⇒ Int → Int → String → (GL.Window → m ()) → m ()
 withGLWindow width height title f = do
-    liftIO $ GL.setErrorCallback $ Just simpleErrorCallback
-    r ← liftIO $ GL.init
-    when r $ do
-      -- liftIO $ GL.defaultWindowHints
-      -- liftIO $ mapM_ GL.windowHint
-      --   [ GL.WindowHint'ContextVersionMajor 3
-      --   , GL.WindowHint'ContextVersionMinor 3
-      --   , GL.WindowHint'OpenGLProfile GL.OpenGLProfile'Core
-      --   , GL.WindowHint'OpenGLForwardCompat True ]
-      m ← liftIO $ GL.createWindow width height title Nothing Nothing
-      case m of
-        Just win → do
-          liftIO $ GL.makeContextCurrent m
-          f win
-          liftIO $ GL.setErrorCallback $ Just simpleErrorCallback
-          liftIO $ GL.destroyWindow win
-        Nothing → pure ()
-      liftIO $ GL.terminate
-  where
-    simpleErrorCallback e s =
-        putStrLn $ unwords [show e, show s]
+    liftIO $ GL.setErrorCallback $ Just simpleErrorPrinter
+    m ← liftIO $ GL.createWindow width height title Nothing Nothing
+    case m of
+      Just win → do
+        liftIO $ GL.makeContextCurrent m
+        f win
+        liftIO $ GL.setErrorCallback $ Just simpleErrorPrinter
+        liftIO $ GL.destroyWindow win
+      Nothing →
+        errormsg $ "Failed to create a GL window.  Was 'init' called and tested for success?  Were the requested window hints (if any) appropriate?"
+    liftIO $ GL.terminate
 
 -- | Setup a GLFW window according to a certain notion of "default".
 defaultGLWindowSetup ∷ (MonadIO m) ⇒ GL.Window → m ()
@@ -349,7 +365,8 @@ keyState key inputE =
 --
 -- | A Reflex host that sets up a default GL window, executes
 --   'defaultGLWindowSetup' on it and yields to the guest.  Performs no extra
---   cleanup at the end.
+--   cleanup at the end.  Like 'withGLWindow', depends on 'init' to be performed
+--   beforehand.
 simpleHost ∷ (MonadIO io)
            ⇒ String                  -- ^ GL window title
            → (∀ t m. ReflexGLFW t m) -- ^ The user FRP network, aka "guest"
