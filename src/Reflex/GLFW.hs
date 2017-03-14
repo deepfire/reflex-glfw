@@ -17,16 +17,16 @@
 {-# LANGUAGE UnicodeSyntax #-}
 module Reflex.GLFW
   ( ReflexGLFW, ReflexGLFWCtx
+  -- * GL window management
   , withGLWindow, defaultGLWindowSetup
-  , host, simpleHost
-  , EventType(..), Input(..), InputU(..)
-  -- * Samples
+  -- * Non-event-driven input sampling
   , JoystickSample(..), sampleJoystick
   , PointerSample(..), samplePointer, pointerSampleZero
   , mouseButtonStateIsPress, keyStateIsPress
   , cursorPosCoords
   , scrollX, scrollY
-  -- * Input events
+  -- * Input Events
+  , EventType(..), Input(..), InputU(..)
   , filterError
   , filterWindowRefresh
   , filterFramebufferSize
@@ -35,9 +35,11 @@ module Reflex.GLFW
   , filterMouseButton, filterMouseButton', filterMouseButtonStateChange
   , filterCursorPos
   , filterChar
-  -- * Input dynamics
+  -- * Input Dynamics
   , mouseButtonState
   , keyState
+  -- * Reflex hosts
+  , host, simpleHost
   )
 where
 
@@ -86,15 +88,9 @@ type ReflexGLFW t m
 type ReflexGLFWCtx t m = (Reflex t, MonadHold t m, MonadFix m, MonadIO m, MonadAdjust t m, PerformEvent t m, MonadIO (Performable m))
 
 
--- * Window management
+-- * GL window management
 --
--- | A default GLFW window setup function.
-defaultGLWindowSetup ∷ (MonadIO m) ⇒ GL.Window → m ()
-defaultGLWindowSetup _ = liftIO $ do
-  GL.glEnable GL.GL_FRAMEBUFFER_SRGB
-  GL.swapInterval 0
-
--- * GLFW-b is made to be very close to the C API, so creating a window is pretty
+-- | GLFW-b is made to be very close to the C API, so creating a window is pretty
 --   clunky by Haskell standards.  A higher-level API would have some function
 --   like 'withWindow'.
 withGLWindow ∷ (MonadIO m) ⇒ Int → Int → String → (GL.Window → m ()) → m ()
@@ -121,8 +117,14 @@ withGLWindow width height title f = do
     simpleErrorCallback e s =
         putStrLn $ unwords [show e, show s]
 
+-- | Setup a GLFW window according to a certain notion of "default".
+defaultGLWindowSetup ∷ (MonadIO m) ⇒ GL.Window → m ()
+defaultGLWindowSetup _ = liftIO $ do
+  GL.glEnable GL.GL_FRAMEBUFFER_SRGB
+  GL.swapInterval 0
+
 
--- * Samples
+-- * Non-event-driven input sampling
 newtype JoystickSample = JoystickSample { jSample ∷ [Double] }
 newtype PointerSample  = PointerSample  { pSample ∷ (Double, Double) }
 
@@ -156,7 +158,7 @@ scrollX (EventScroll _ x _) = x
 scrollY (EventScroll _ _ y) = y
 
 
--- * Events
+-- * Input Events
 --
 filterError           ∷ Reflex t ⇒ Event t InputU → Event t (Input Error)
 filterWindowRefresh   ∷ Reflex t ⇒ Event t InputU → Event t (Input WindowRefresh)
@@ -183,21 +185,6 @@ filterMouseButtonStateChange btn state = ffilter (\case EventMouseButton _ k st 
 filterKey', filterKeyPress       ∷ Reflex t   ⇒ GL.Key         → Event t (Input Key)         → Event t (Input Key)
 filterKey'     key = ffilter (\case EventKey _ k _ _  _ → k ≡ key)
 filterKeyPress key = ffilter (\case EventKey _ k _ ks _ → k ≡ key ∧ keyStateIsPress ks)
-
-mouseButtonState ∷ ReflexGLFWCtx t m ⇒ GL.MouseButton → Event t (Input MouseButton) → m (Dynamic t (Maybe (Double, Double)))
-mouseButtonState btn inputE = do
-  -- XXX/optimise:  maybe 'toggle' is to help us here?
-  e ← performEvent $ filterMouseButton' btn inputE <&>
-    (\case EventMouseButton win _ ks _ → do
-             if mouseButtonStateIsPress ks
-             then Just <$> (liftIO $ GL.getCursorPos win)
-             else pure Nothing)
-  holdDyn Nothing e
-
-keyState ∷ ReflexGLFWCtx t m ⇒ GL.Key → Event t (Input Key) → m (Dynamic t Bool)
-keyState key inputE =
-  -- XXX/optimise:  maybe 'toggle' is to help us here?
-  holdDyn False $ (\case EventKey _ _ _ ks _       → keyStateIsPress ks)         <$> filterKey' key inputE
 
 -- | The type describing deliverable GLFW events.
 data EventType
@@ -339,22 +326,46 @@ readInput queue = liftIO $ do
   GL.pollEvents
   STM.atomically $ STM.tryReadTQueue queue
 
--- | A host that uses 'defaultGLwindow' and no cleanup.
+
+-- * Input Dynamics
+--
+mouseButtonState ∷ ReflexGLFWCtx t m ⇒ GL.MouseButton → Event t (Input MouseButton) → m (Dynamic t (Maybe (Double, Double)))
+mouseButtonState btn inputE = do
+  -- XXX/optimise:  maybe 'toggle' is to help us here?
+  e ← performEvent $ filterMouseButton' btn inputE <&>
+    (\case EventMouseButton win _ ks _ → do
+             if mouseButtonStateIsPress ks
+             then Just <$> (liftIO $ GL.getCursorPos win)
+             else pure Nothing)
+  holdDyn Nothing e
+
+keyState ∷ ReflexGLFWCtx t m ⇒ GL.Key → Event t (Input Key) → m (Dynamic t Bool)
+keyState key inputE =
+  -- XXX/optimise:  maybe 'toggle' is to help us here?
+  holdDyn False $ (\case EventKey _ _ _ ks _       → keyStateIsPress ks)         <$> filterKey' key inputE
+
+
+-- * Reflex hosts
+--
+-- | A Reflex host that sets up a default GL window, executes
+--   'defaultGLWindowSetup' on it and yields to the guest.  Performs no extra
+--   cleanup at the end.
 simpleHost ∷ (MonadIO io)
-           ⇒ String
-           → (∀ t m. ReflexGLFW t m)
+           ⇒ String                  -- ^ GL window title
+           → (∀ t m. ReflexGLFW t m) -- ^ The user FRP network, aka "guest"
            → io ()
 simpleHost title guest =
   withGLWindow 1024 768 title $ \win → do
     defaultGLWindowSetup win
     host win guest
 
--- | Run a program written in the framework.  This will do all the necessary
---   work to integrate the Reflex-based guest program with the outside world
---   via IO.
+-- | A Reflex host runs a program written in the framework.  This will do all the
+--   necessary work to integrate the Reflex-based guest program with the outside
+--   world via IO.
 host ∷ (MonadIO io)
-     ⇒ GL.Window
-     → (∀ t m. ReflexGLFW t m)
+     ⇒ GL.Window                     -- ^ A GL window to operate on.  One could be
+                                     --   made by 'withGLWindow'.
+     → (∀ t m. ReflexGLFW t m)       -- ^ The user FRP network, aka "guest"
      → io ()
 host win myGuest = do
   queue ← makeInputQueue win
