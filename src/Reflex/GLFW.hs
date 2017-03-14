@@ -373,8 +373,6 @@ host win myGuest = do
 
     let loop ∷ SpiderHost Global ()
         loop = do
-          mInput ← readInput queue
-
           (stopRequest, FireCommand _) ← hostPerformEventT $ sample b
 
           mTrig' ← liftIO $ readIORef fTriggerRef
@@ -382,12 +380,18 @@ host win myGuest = do
             Nothing   → pure [()]
             Just trig →
               threadedFire [trig :=> Identity win] $ pure ()
-          mTrig'' ← liftIO $ readIORef iTriggerRef
-          case (mTrig'', mInput) of
-            (Nothing, _)   → pure [()]
-            (_, Nothing)   → pure [()]
-            (Just trig, Just input) →
-              threadedFire [trig :=> Identity input] $ pure ()
+
+          let inputInnerLoop = do
+                mInput ← readInput queue
+                case mInput of
+                  Nothing → pure ()
+                  Just input → do
+                    mTrig'' ← liftIO $ readIORef iTriggerRef
+                    case mTrig'' of
+                      Nothing → pure [()]
+                      Just trig → threadedFire [trig :=> Identity input] $ pure ()
+                    inputInnerLoop
+          inputInnerLoop
 
           unless stopRequest $
             loop
