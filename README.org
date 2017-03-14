@@ -32,3 +32,24 @@
     cabal build
     dist/build/reflex-glfw-demo/reflex-glfw-demo
     #+END_SRC
+
+*** libGL error: unable to load driver: XXX_dri.so
+
+    In case you happen upon https://github.com/deepfire/reflex-glfw/issues/4, at
+    least for nVidia GPUs there's a semi-automated solution:
+
+    #+BEGIN_SRC shell
+    ./nix-install-vendor-gl.sh
+    export LD_LIBRARY_PATH=/run/opengl-driver/lib
+    #+END_SRC
+
+    Make sure to read the output of:
+
+    #+BEGIN_SRC shell
+    ./nix-install-vendor-gl.sh --explain
+    #+END_SRC
+
+    ..to get the bigger picture.
+
+    Adding support for other GPU vendors shouldn't be very hard -- all the
+    infrastructure is there.
