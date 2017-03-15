@@ -17,7 +17,7 @@
 {-# LANGUAGE UnicodeSyntax #-}
 module Reflex.GLFW
   ( ReflexGLFW, ReflexGLFWCtx
-  -- * GL window management
+  -- * GL window setup
   , init
   , withGLWindow, defaultGLWindowSetup
   -- * Non-event-driven input sampling
@@ -40,7 +40,7 @@ module Reflex.GLFW
   , mouseButtonState
   , keyState
   -- * Reflex hosts
-  , host, simpleHost
+  , simpleHost, basicHost, host
   )
 where
 
@@ -90,7 +90,7 @@ type ReflexGLFW t m
 type ReflexGLFWCtx t m = (Reflex t, MonadHold t m, MonadFix m, MonadIO m, MonadAdjust t m, PerformEvent t m, MonadIO (Performable m))
 
 
--- * GL window management
+-- * GL window setup
 --
 errormsgIO ∷ String → IO ()
 errormsgIO = Sys.hPutStrLn Sys.stderr
@@ -375,6 +375,16 @@ simpleHost title guest =
   withGLWindow 1024 768 title $ \win → do
     defaultGLWindowSetup win
     host win guest
+
+-- | Like 'simpleHost', but also performs 'init' itself.  Note, that this limits
+--   the GL profile to whatever is provided by 'GLFW.defaultWindowHints'.
+basicHost ∷ (MonadIO io) ⇒ String → (∀ t m. ReflexGLFW t m) → io ()
+basicHost title guest = do
+  success ← init
+  unless success $
+    error "GLFW failed to initialise GL."
+
+  simpleHost title guest
 
 -- | A Reflex host runs a program written in the framework.  This will do all the
 --   necessary work to integrate the Reflex-based guest program with the outside
