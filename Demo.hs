@@ -246,7 +246,7 @@ demoGuest win setupE windowFrameE inputE = do
 
 main ∷ IO ()
 main = do
-  success ← RGL.init
+  success ← RGL.tryInit
   unless success $
     error "GLFW failed to initialise GL."
 

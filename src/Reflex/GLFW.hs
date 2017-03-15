@@ -18,7 +18,7 @@
 module Reflex.GLFW
   ( ReflexGLFW, ReflexGLFWCtx
   -- * GL window setup
-  , init
+  , tryInit, init
   , withGLWindow, defaultGLWindowSetup
   -- * Non-event-driven input sampling
   , JoystickSample(..), sampleJoystick
@@ -44,6 +44,7 @@ module Reflex.GLFW
   )
 where
 
+import           GHC.Stack
 import           Prelude                            hiding (Char, init)
 import qualified Prelude                            as Prelude
 import           Prelude.Unicode
@@ -112,16 +113,23 @@ simpleErrorPrinter e s =
 --
 --   Then, proceed with running our FRP network using a call to 'host', nested
 --   inside the 'withGLWindow' context bracket.
-init ∷ (MonadIO m) ⇒ m Bool
-init = liftIO $ do
+tryInit ∷ (MonadIO m) ⇒ m Bool
+tryInit = liftIO $ do
   GL.setErrorCallback $ Just simpleErrorPrinter
   GL.init
+
+-- | Like 'init' but raise an error, instead of returning 'False'.
+init ∷ (HasCallStack, MonadIO io) ⇒ io ()
+init = do
+  success ← tryInit
+  unless success $
+    error "GLFW failed to initialise GL."
 
 -- | GLFW-b is made to be very close to the C API, so creating a window is pretty
 --   clunky by Haskell standards.  A higher-level API would have some function
 --   like 'withWindow'.
 --
---   NOTE: 'init' must be called before this function.
+--   NOTE: 'init'/'tryInit' must be called before this function.
 withGLWindow ∷ (MonadIO m) ⇒ Int → Int → String → (GL.Window → m ()) → m ()
 withGLWindow width height title f = do
     liftIO $ GL.setErrorCallback $ Just simpleErrorPrinter
@@ -133,7 +141,7 @@ withGLWindow width height title f = do
         liftIO $ GL.setErrorCallback $ Just simpleErrorPrinter
         liftIO $ GL.destroyWindow win
       Nothing →
-        errormsg $ "Failed to create a GL window.  Was 'init' called and tested for success?  Were the requested window hints (if any) appropriate?"
+        errormsg $ "Failed to create a GL window.  Was 'init' called?  Were the requested window hints (if any) appropriate?"
     liftIO $ GL.terminate
 
 -- | Setup a GLFW window according to a certain notion of "default".
@@ -368,8 +376,8 @@ keyState key inputE =
 --
 -- | A Reflex host that sets up a default GL window, executes
 --   'defaultGLWindowSetup' on it and yields to the guest.  Performs no extra
---   cleanup at the end.  Like 'withGLWindow', depends on 'init' to be performed
---   beforehand.
+--   cleanup at the end.  Like 'withGLWindow', depends on 'init'/'tryInit' to be
+--   performed beforehand.
 simpleHost ∷ (MonadIO io)
            ⇒ String                  -- ^ GL window title
            → (∀ t m. ReflexGLFW t m) -- ^ The user FRP network, aka "guest"
@@ -382,12 +390,8 @@ simpleHost title guest =
 -- | Like 'simpleHost', but also performs 'init' itself.  Note, that this limits
 --   the GL profile to whatever is provided by 'GLFW.defaultWindowHints'.
 basicHost ∷ (MonadIO io) ⇒ String → (∀ t m. ReflexGLFW t m) → io ()
-basicHost title guest = do
-  success ← init
-  unless success $
-    error "GLFW failed to initialise GL."
+basicHost title guest = init >> simpleHost title guest
 
-  simpleHost title guest
 
 -- | A Reflex host runs a program written in the framework.  This will do all the
 --   necessary work to integrate the Reflex-based guest program with the outside
