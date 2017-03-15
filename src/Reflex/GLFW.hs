@@ -1,8 +1,13 @@
--- Derived from:
---  1. https://raw.githubusercontent.com/reflex-frp/reflex-platform/develop/examples/host.hs
---  2. http://hackage.haskell.org/package/GLFW-b-demo-1.0.4/src/src/Main.hs
---
--- See the documentation of the ReflexGLFW type for caveats.
+{-|
+Module      : Reflex.GLFW
+Description : A GLFW-b adapter for the Haskell Reflex FRP implementation.
+Copyright   : (c) Serge Kosyrev, 2017
+License     : BSD-3
+Maintainer  : _deepfire@feelingofgreen.ru (temporarily defunct)
+Stability   : experimental
+Portability : Unspecified
+
+-}
 {-# OPTIONS_GHC -Wall -Wno-unused-do-bind -Wno-unused-top-binds -Wno-unticked-promoted-constructors #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
@@ -72,29 +77,29 @@ import           Reflex
 import           Reflex.Host.Class                         (newEventWithTriggerRef)
 
 
--- | Define the type for apps using our host framework.  Programmers
---   will write programs of type @ReflexGLFW t m@ and use our
---   framework to run them.
+-- | The constructor for Reflex FRP networks runnable by 'Reflex.GLFW' hosts is a
+-- function, that takes:
 --
---   In this framework, the user will write programs that:
---   - take:
---     - the window object
---     - frame update events (XXX#1: currently at unconstrained rate)
---     - GLFW input events (XXX#2: currently, a non-configurable subset of them)
---   - and produce an output boolean behavior, that is interpreted
---     as a request for event loop termination.
+--       * the GLFW window object
+--       * an event control object (currently used for muting/unmuting categories)
+--       * the setup event, that fires just once at beginning
+--       * stream of new-frame events
+--       * stream of the enabled subset of GLFW input events
 --
---   XXX#3: currently, input events are injected at rate of one-per-frame.
---          Not sure how much of a problem this is..
+--   ..and produces an output boolean behavior in the 'ReflexGLFWCtx'-constrained
+--     monad, that is interpreted as a request for termination -- shutdown once
+--     'True'.
 --
 type ReflexGLFW t m
   = ReflexGLFWCtx t m
-  ⇒ GL.Window
-  → EventCtl
+  ⇒ GL.Window           -- ^ The GLFW window to draw unto and suck events from
+  → EventCtl            -- ^ An "event control" handler, providing IO actions to
+                        --   mute/unmute events at GLFW level with 'EventType'
+                        --   granularity: see 'setEvent'
   → Event t ()          -- ^ The initial "setup" event, that arrives just once, at the very first frame.
-  → Event t GL.Window   -- ^ The window to draw on, fired on every frame.
+  → Event t GL.Window   -- ^ The window to draw on, fired on every frame
   → Event t InputU      -- ^ Fired whenever input happens, which isn't always the case..
-  → m (Behavior t Bool)
+  → m (Behavior t Bool) -- ^ The monadic-FRP-network-builder to be passed to 'host'
 type ReflexGLFWCtx t m = (Reflex t, MonadHold t m, MonadFix m, MonadIO m, MonadAdjust t m, PerformEvent t m, MonadIO (Performable m))
 
 
@@ -133,7 +138,7 @@ init = do
     error "GLFW failed to initialise GL."
 
 -- | Request a forward-compatible OpenGL 3.3 core profile.
---   Should be called after 'init'/'tryInit' and before 'withGLWindow'.
+--   Should be called between 'init' / 'tryInit' and 'withGLWindow'.
 gl33ForwardCoreSetup ∷ (MonadIO m) ⇒ m ()
 gl33ForwardCoreSetup = liftIO $ do
   GL.defaultWindowHints
@@ -143,11 +148,9 @@ gl33ForwardCoreSetup = liftIO $ do
     , GL.WindowHint'OpenGLProfile GL.OpenGLProfile'Core
     , GL.WindowHint'OpenGLForwardCompat True ]
 
--- | GLFW-b is made to be very close to the C API, so creating a window is pretty
---   clunky by Haskell standards.  A higher-level API would have some function
---   like 'withWindow'.
---
---   NOTE: 'init'/'tryInit' must be called before this function.
+-- | Call this function after 'init' / 'tryInit', and once the necessary GLFW
+-- window hints are provided (if any were deemed required, that is) either by
+-- 'gl33ForwardCoreSetup' or by direct "GLFW" API calls.
 withGLWindow ∷ (MonadIO m) ⇒ Int → Int → String → (GL.Window → m ()) → m ()
 withGLWindow width height title f = do
     liftIO $ GL.setErrorCallback $ Just simpleErrorPrinter
@@ -432,7 +435,7 @@ keyState key inputE =
 --
 -- | A Reflex host that sets up a default GL window, executes
 --   'defaultGLWindowSetup' on it and yields to the guest.  Performs no extra
---   cleanup at the end.  Like 'withGLWindow', depends on 'init'/'tryInit' to be
+--   cleanup at the end.  Like 'withGLWindow', depends on 'init' / 'tryInit' to be
 --   performed beforehand.
 simpleHost ∷ (MonadIO io)
            ⇒ String                  -- ^ GL window title
