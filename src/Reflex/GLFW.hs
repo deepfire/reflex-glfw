@@ -19,6 +19,7 @@ module Reflex.GLFW
   ( ReflexGLFW, ReflexGLFWCtx
   -- * GL window setup
   , tryInit, init
+  , gl33ForwardCoreSetup
   , withGLWindow, defaultGLWindowSetup
   -- * Non-event-driven input sampling
   , JoystickSample(..), sampleJoystick
@@ -40,7 +41,9 @@ module Reflex.GLFW
   , mouseButtonState
   , keyState
   -- * Reflex hosts
-  , simpleHost, basicHost, host
+  , simpleHost
+  , basicHost, basicGL33Host
+  , host
   )
 where
 
@@ -124,6 +127,17 @@ init = do
   success ← tryInit
   unless success $
     error "GLFW failed to initialise GL."
+
+-- | Request a forward-compatible OpenGL 3.3 core profile.
+--   Should be called after 'init'/'tryInit' and before 'withGLWindow'.
+gl33ForwardCoreSetup ∷ (MonadIO m) ⇒ m ()
+gl33ForwardCoreSetup = liftIO $ do
+  GL.defaultWindowHints
+  mapM_ GL.windowHint
+    [ GL.WindowHint'ContextVersionMajor 3
+    , GL.WindowHint'ContextVersionMinor 3
+    , GL.WindowHint'OpenGLProfile GL.OpenGLProfile'Core
+    , GL.WindowHint'OpenGLForwardCompat True ]
 
 -- | GLFW-b is made to be very close to the C API, so creating a window is pretty
 --   clunky by Haskell standards.  A higher-level API would have some function
@@ -392,6 +406,9 @@ simpleHost title guest =
 basicHost ∷ (MonadIO io) ⇒ String → (∀ t m. ReflexGLFW t m) → io ()
 basicHost title guest = init >> simpleHost title guest
 
+-- | Like 'basicHost', but requests a forward-compatible OpenGL 3.3 Core profile.
+basicGL33Host ∷ (MonadIO io) ⇒ String → (∀ t m. ReflexGLFW t m) → io ()
+basicGL33Host title guest = init >> gl33ForwardCoreSetup >> simpleHost title guest
 
 -- | A Reflex host runs a program written in the framework.  This will do all the
 --   necessary work to integrate the Reflex-based guest program with the outside
