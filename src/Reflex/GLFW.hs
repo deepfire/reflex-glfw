@@ -90,7 +90,7 @@ type ReflexGLFW t m
 type ReflexGLFWCtx t m = (Reflex t, MonadHold t m, MonadFix m, MonadIO m, MonadAdjust t m, PerformEvent t m, MonadIO (Performable m))
 
 
--- * GL window setup
+-- * GLFW error handling
 --
 errormsgIO ∷ String → IO ()
 errormsgIO = Sys.hPutStrLn Sys.stderr
@@ -102,6 +102,9 @@ simpleErrorPrinter ∷ GL.ErrorCallback
 simpleErrorPrinter e s =
   errormsg $ unwords [show e, show s]
 
+
+-- * GL window setup
+--
 -- | This function initialises 'Reflex.GLFW' and returns 'False' upon failure.
 --
 --   If it succeeds, we might follow with setting GL window hints as/if needed,
