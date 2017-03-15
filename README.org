@@ -1,3 +1,10 @@
+* Pre-release NOTE
+
+  =reflex-glfw= awaits to be released on Hackage:
+  - progress :: https://github.com/deepfire/reflex-glfw/milestone/1
+  - post issues here :: https://github.com/deepfire/reflex-glfw/issues
+  - general feedback here :: https://github.com/deepfire/reflex-glfw/issues/7
+
 * reflex-glfw
 *** What
 

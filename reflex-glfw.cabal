@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                reflex-glfw
-version:             0.1.0.0
+version:             0.1.0
 synopsis:            A GLFW-b adapter for Reflex FRP.
 -- description:
 homepage:            https://github.com/deepfire/reflex-glfw/
