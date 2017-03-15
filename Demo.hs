@@ -148,11 +148,12 @@ newtype PointerDrag = PointerDrag ((Double, Double), (Double, Double))
 
 demoGuest ∷ ReflexGLFWCtx t m
           ⇒ GLFW.Window
+          → EventCtl
           → Event t ()          -- ^ The initial "setup" event, that arrives just once, at the very first frame.
           → Event t GLFW.Window -- ^ The window to draw on, fired on every frame.
           → Event t InputU      -- ^ Fired whenever input happens, which isn't always the case..
           → m (Behavior t Bool)
-demoGuest win setupE windowFrameE inputE = do
+demoGuest win _ec setupE windowFrameE inputE = do
   liftIO $ Sys.hSetBuffering Sys.stdout Sys.NoBuffering
   env@Env{..} ← guestInit win
   printInstructions
@@ -177,6 +178,11 @@ demoGuest win setupE windowFrameE inputE = do
                       (() <$ filterKeyPress GLFW.Key'Escape                keyE)
       infoRequestE  =  () <$ filterKeyPress GLFW.Key'I                     keyE
       helpRequestE  =  () <$ filterKeyPress GLFW.Key'Slash                 keyE --XXX: GLFW.modifierKeysShift mk
+
+  performEvent $ filterKeyPress GLFW.Key'J keyE <&>
+    (const $ liftIO $ enableEvent _ec MouseButton)
+  performEvent $ filterKeyPress GLFW.Key'K keyE <&>
+    (const $ liftIO $ disableEvent _ec MouseButton)
 
   -- ..tier II
   let keyJoyDirectD = join (***) (*2) <$> zipDynWith (\(kxrot , kyrot) (jxrot , jyrot)→
@@ -321,6 +327,8 @@ printInstructions =
         text "* Mouse cursor, keyboard cursor keys, and/or joystick"        $+$
         text "  control rotation."                                          $+$
         text "* Mouse scroll wheel controls distance from scene."           $+$
+        text ""                                                             $+$
+        text "'j'/'k': Enable/disable mouse button sensitivity."            $+$
         text "------------------------------------------------------------"
       )
 

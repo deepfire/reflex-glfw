@@ -29,6 +29,7 @@ module Reflex.GLFW
   , scrollX, scrollY
   -- * Input Events
   , EventType(..), Input(..), InputU(..)
+  , EventCtl, setEvent, enableEvent, disableEvent
   , filterError
   , filterWindowRefresh
   , filterFramebufferSize
@@ -54,12 +55,14 @@ import           Prelude.Unicode
 
 import qualified Control.Concurrent.STM             as STM (TQueue, atomically, newTQueueIO, tryReadTQueue, writeTQueue)
 import           Control.Lens
-import           Control.Monad                             (unless)
+import           Control.Monad                             (unless, forM_)
 import           Control.Monad.Fix                         (MonadFix)
 import           Control.Monad.Identity                    (Identity(..))
 import           Control.Monad.IO.Class                    (MonadIO, liftIO)
-import           Data.IORef                                (readIORef)
 import           Data.Dependent.Sum                        (DSum ((:=>)))
+import           Data.IORef                                (readIORef)
+import           Data.Map
+import           Data.Maybe
 
 import qualified Graphics.GL.Core33                 as GL
 import qualified "GLFW-b" Graphics.UI.GLFW          as GL
@@ -87,6 +90,7 @@ import           Reflex.Host.Class                         (newEventWithTriggerR
 type ReflexGLFW t m
   = ReflexGLFWCtx t m
   ⇒ GL.Window
+  → EventCtl
   → Event t ()          -- ^ The initial "setup" event, that arrives just once, at the very first frame.
   → Event t GL.Window   -- ^ The window to draw on, fired on every frame.
   → Event t InputU      -- ^ Fired whenever input happens, which isn't always the case..
@@ -243,6 +247,7 @@ data EventType
   | Scroll
   | Key
   | Char
+  deriving (Eq, Ord)
 
 data InputU where
   U ∷ Input k → InputU
@@ -294,7 +299,7 @@ scrollCallback          tc win x y        = STM.atomically ∘ STM.writeTQueue t
 keyCallback             tc win k sc ka mk = STM.atomically ∘ STM.writeTQueue tc ∘ U $ EventKey             win k sc ka mk
 charCallback            tc win c          = STM.atomically ∘ STM.writeTQueue tc ∘ U $ EventChar            win c
 
-enableErrorEvents            ∷ MonadIO m ⇒ STM.TQueue InputU →             m ()
+enableErrorEvents            ∷ MonadIO m ⇒ STM.TQueue InputU → GL.Window → m ()
 enableWindowPosEvents        ∷ MonadIO m ⇒ STM.TQueue InputU → GL.Window → m ()
 enableWindowSizeEvents       ∷ MonadIO m ⇒ STM.TQueue InputU → GL.Window → m ()
 enableWindowCloseEvents      ∷ MonadIO m ⇒ STM.TQueue InputU → GL.Window → m ()
@@ -308,7 +313,7 @@ enableCursorEnterEvents      ∷ MonadIO m ⇒ STM.TQueue InputU → GL.Window �
 enableScrollEvents           ∷ MonadIO m ⇒ STM.TQueue InputU → GL.Window → m ()
 enableKeyEvents              ∷ MonadIO m ⇒ STM.TQueue InputU → GL.Window → m ()
 enableCharEvents             ∷ MonadIO m ⇒ STM.TQueue InputU → GL.Window → m ()
-disableErrorEvents           ∷ MonadIO m ⇒                                 m ()
+disableErrorEvents           ∷ MonadIO m ⇒                     GL.Window → m ()
 disableWindowPosEvents       ∷ MonadIO m ⇒                     GL.Window → m ()
 disableWindowSizeEvents      ∷ MonadIO m ⇒                     GL.Window → m ()
 disableWindowCloseEvents     ∷ MonadIO m ⇒                     GL.Window → m ()
@@ -322,7 +327,7 @@ disableCursorEnterEvents     ∷ MonadIO m ⇒                     GL.Window →
 disableScrollEvents          ∷ MonadIO m ⇒                     GL.Window → m ()
 disableKeyEvents             ∷ MonadIO m ⇒                     GL.Window → m ()
 disableCharEvents            ∷ MonadIO m ⇒                     GL.Window → m ()
-enableErrorEvents            iq     = liftIO $ GL.setErrorCallback               $ Just $ errorCallback           iq
+enableErrorEvents            iq   _ = liftIO $ GL.setErrorCallback               $ Just $ errorCallback           iq
 enableWindowPosEvents        iq win = liftIO $ GL.setWindowPosCallback       win $ Just $ windowPosCallback       iq
 enableWindowSizeEvents       iq win = liftIO $ GL.setWindowSizeCallback      win $ Just $ windowSizeCallback      iq
 enableWindowCloseEvents      iq win = liftIO $ GL.setWindowCloseCallback     win $ Just $ windowCloseCallback     iq
@@ -336,7 +341,7 @@ enableCursorEnterEvents      iq win = liftIO $ GL.setCursorEnterCallback     win
 enableScrollEvents           iq win = liftIO $ GL.setScrollCallback          win $ Just $ scrollCallback          iq
 enableKeyEvents              iq win = liftIO $ GL.setKeyCallback             win $ Just $ keyCallback             iq
 enableCharEvents             iq win = liftIO $ GL.setCharCallback            win $ Just $ charCallback            iq
-disableErrorEvents                  = liftIO $ GL.setErrorCallback               $ Nothing
+disableErrorEvents                _ = liftIO $ GL.setErrorCallback               $ Nothing
 disableWindowPosEvents          win = liftIO $ GL.setWindowPosCallback       win $ Nothing
 disableWindowSizeEvents         win = liftIO $ GL.setWindowSizeCallback      win $ Nothing
 disableWindowCloseEvents        win = liftIO $ GL.setWindowCloseCallback     win $ Nothing
@@ -351,21 +356,58 @@ disableScrollEvents             win = liftIO $ GL.setScrollCallback          win
 disableKeyEvents                win = liftIO $ GL.setKeyCallback             win $ Nothing
 disableCharEvents               win = liftIO $ GL.setCharCallback            win $ Nothing
 
-makeInputQueue ∷ (MonadIO m) ⇒ GL.Window → m (STM.TQueue InputU)
-makeInputQueue win = liftIO $ do
-  iq ← STM.newTQueueIO
-  enableErrorEvents       iq
-  enableMouseButtonEvents iq win
-  enableCursorPosEvents   iq win
-  enableScrollEvents      iq win
-  enableKeyEvents         iq win
-  enableCharEvents        iq win
-  pure iq
+
+-- * Safe input queue manipulation
+--
+newtype EventCtl = EventCtl (GL.Window, STM.TQueue InputU)
 
-readInput ∷ (MonadIO m) ⇒ STM.TQueue InputU → m (Maybe InputU)
-readInput queue = liftIO $ do
+makeEventCtl ∷ (MonadIO m) ⇒ GL.Window → m EventCtl
+makeEventCtl win = liftIO $ do
+  iq ← STM.newTQueueIO
+  let ec = EventCtl (win, iq)
+  forM_ defaultEnabledEvents $ \et→
+    enableEvent ec et
+  pure ec
+
+readInput ∷ (MonadIO m) ⇒ EventCtl → m (Maybe InputU)
+readInput (EventCtl (_, queue)) = liftIO $ do
   GL.pollEvents
   STM.atomically $ STM.tryReadTQueue queue
+
+defaultEnabledEvents ∷ [EventType]
+defaultEnabledEvents =
+  [Error, MouseButton, CursorPos, Scroll, Key, Char]
+
+eventControlMap ∷ MonadIO m ⇒ Map EventType
+                                  (STM.TQueue InputU → GL.Window → m ()
+                                  ,                    GL.Window → m ())
+eventControlMap = fromList
+  [(Error,           (enableErrorEvents,           disableErrorEvents))
+  ,(WindowPos,       (enableWindowPosEvents,       disableWindowPosEvents))
+  ,(WindowSize,      (enableWindowSizeEvents,      disableWindowSizeEvents))
+  ,(WindowClose,     (enableWindowCloseEvents,     disableWindowCloseEvents))
+  ,(WindowRefresh,   (enableWindowRefreshEvents,   disableWindowRefreshEvents))
+  ,(WindowFocus,     (enableWindowFocusEvents,     disableWindowFocusEvents))
+  ,(WindowIconify,   (enableWindowIconifyEvents,   disableWindowIconifyEvents))
+  ,(FramebufferSize, (enableFramebufferSizeEvents, disableFramebufferSizeEvents))
+  ,(MouseButton,     (enableMouseButtonEvents,     disableMouseButtonEvents))
+  ,(CursorPos,       (enableCursorPosEvents,       disableCursorPosEvents))
+  ,(CursorEnter,     (enableCursorEnterEvents,     disableCursorEnterEvents))
+  ,(Scroll,          (enableScrollEvents,          disableScrollEvents))
+  ,(Key,             (enableKeyEvents,             disableKeyEvents))
+  ,(Char,            (enableCharEvents,            disableCharEvents))]
+
+-- | Control firing of events of 'EventType'.
+setEvent ∷ Bool → EventCtl → EventType → IO ()
+setEvent True  (EventCtl (win, iq)) evType =
+  (fst ∘ fromJust $ Data.Map.lookup evType eventControlMap) iq win
+setEvent False (EventCtl (win,  _)) evType =
+  (snd ∘ fromJust $ Data.Map.lookup evType eventControlMap)    win
+
+-- | Specialised versions of 'setEvent'.
+enableEvent, disableEvent ∷ EventCtl → EventType → IO ()
+enableEvent  = setEvent True
+disableEvent = setEvent False
 
 
 -- * Input Dynamics
@@ -419,7 +461,7 @@ host ∷ (MonadIO io)
      → (∀ t m. ReflexGLFW t m)       -- ^ The user FRP network, aka "guest"
      → io ()
 host win myGuest = do
-  queue ← makeInputQueue win
+  ec ← makeEventCtl win
 
   -- Use the Spider implementation of Reflex.
   liftIO $ runSpiderHost $ do
@@ -427,7 +469,7 @@ host win myGuest = do
     (f, fTriggerRef) ← newEventWithTriggerRef -- Frames
     (i, iTriggerRef) ← newEventWithTriggerRef -- Input
 
-    (b, FireCommand threadedFire) ← hostPerformEventT $ myGuest win s f i
+    (b, FireCommand threadedFire) ← hostPerformEventT $ myGuest win ec s f i
     mTrig ← liftIO $ readIORef sTriggerRef
     case mTrig of
       Nothing   → pure ()
@@ -444,7 +486,7 @@ host win myGuest = do
               threadedFire [trig :=> Identity win] $ pure ()
 
           let inputInnerLoop = do
-                mInput ← readInput queue
+                mInput ← readInput ec
                 case mInput of
                   Nothing → pure ()
                   Just input → do
