@@ -10,10 +10,10 @@ matrix:
           dist: trusty
           compiler: ": #GHC 8.0.2"
           env: GHCATTR=ghc802
-        - os: linux
-          dist: trusty
-          compiler: ": #GHC 7.10.3"
-          env: GHCATTR=ghc7103
+        # - os: linux
+        #   dist: trusty
+        #   compiler: ": #GHC 7.10.3"
+        #   env: GHCATTR=ghc7103
 notifications:
     email: false
 #         on_success: never

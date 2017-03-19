@@ -11,8 +11,8 @@ let
     overrides = with haskell.lib; new: old:
     let parent = (oldArgs.overrides or (_: _: {})) new old;
     in with new; parent // {
-      aeson      = dontHaddock (dontCheck old.aeson);
-      scientific = dontHaddock (dontCheck old.scientific);
+      # aeson      = dontHaddock (dontCheck old.aeson);
+      # scientific = dontHaddock (dontCheck old.scientific);
       reflex     = dontHaddock (dontCheck (new.callPackage
       ({ stdenv, mkDerivation, base, containers, data-default, dependent-map, dependent-sum
        , exception-transformers, haskell-src-exts, haskell-src-meta, hlint
