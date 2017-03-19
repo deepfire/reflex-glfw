@@ -17,6 +17,7 @@
 *.graphml
 *.json
 
+/result
 /dist/
 /cabal-dev/
 /.cabal-sandbox/
