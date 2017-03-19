@@ -1,6 +1,9 @@
 language: nix
 sudo: false
-script: nix-build shell.nix --argstr compiler $GHCATTR
+script: nix-shell shell.nix --argstr compiler $GHCATTR --command true --no-build-output && echo "=========================== env built ===========================" && nix-build shell.nix --argstr compiler $GHCATTR
+cache:
+  directories:
+    - /nix
 matrix:
     include:
         - os: linux
