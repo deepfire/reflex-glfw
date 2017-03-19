@@ -11,7 +11,7 @@ let
     overrides = with haskell.lib; new: old:
     let parent = (oldArgs.overrides or (_: _: {})) new old;
     in with new; parent // {
-      reflex = new.callPackage
+      reflex = dontHaddock (dontCheck (new.callPackage
       ({ stdenv, mkDerivation, base, containers, data-default, dependent-map, dependent-sum
        , exception-transformers, haskell-src-exts, haskell-src-meta, hlint
        , MemoTrie, lens, monad-control, mtl, primitive, prim-uniq, ref-tf, reflection, semigroups, split, syb
@@ -38,14 +38,14 @@ let
            description = "Higher-order Functional Reactive Programming";
            license = stdenv.lib.licenses.bsd3;
            hydraPlatforms = stdenv.lib.platforms.none;
-       }) {};
+       }) {}));
     };
   });
-in
-
-(haskell.lib.addBuildTools
+  drv = (haskell.lib.addBuildTools
   (ghc.callPackage (import ./.) { })
   [ pkgs.cabal-install
     pkgs.stack
     ghc.intero
-  ]).env
+  ]);
+in
+  if nixpkgs.lib.inNixShell then drv.env else drv
