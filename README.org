@@ -1,4 +1,4 @@
-[[https://travis-ci.org/travis-ci/reflex-glfw.svg?branch=master]]
+[[https://api.travis-ci.org/deepfire/reflex-glfw.svg?branch=master]]
 
 * Pre-release NOTE
 
