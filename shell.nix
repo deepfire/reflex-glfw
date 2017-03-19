@@ -1,7 +1,9 @@
-{ nixpkgs     ? import ./nixpkgs {}
-#, nixpkgs     ? import <nixpkgs> {}
+{ pinned      ? false
+, nixpkgs     ? import (if pinned
+                        then ./nixpkgs
+                        else <nixpkgs>) {}
 , pkgs        ? nixpkgs.pkgs, haskell ? pkgs.haskell
-, compiler    ? "ghc801"
+, compiler    ? "ghc802"
 , ghcOrig     ? pkgs.haskell.packages."${compiler}"
 }:
 let
@@ -19,10 +21,10 @@ let
            pname = "reflex";
            version = "0.5.0";
            src = pkgs.fetchFromGitHub {
-             owner = "reflex-frp";
+             owner = "deepfire";
              repo = "reflex";
-             rev = "d78ba4318c425ca9b942dc387d7c5c7ab2d2e095";
-             sha256 = "10sryvwdf88ajkp35yma8llkb38cp63vjr5mq2hba4s2d8yg649q";
+             rev = "ca928573e6d1a17fe02de2d89d410db8f24d34e8";
+             sha256 = "1lmgfiz76cv5bh8ri9v7k2djzjd9rmm8lhgw8kd9x7hh9331f15a";
            };
            libraryHaskellDepends = [
              base containers data-default dependent-map dependent-sum exception-transformers
