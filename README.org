@@ -1,3 +1,5 @@
+[[https://travis-ci.org/travis-ci/reflex-glfw.svg?branch=master]]
+
 * Pre-release NOTE
 
   =reflex-glfw= awaits to be released on Hackage:
