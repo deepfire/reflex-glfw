@@ -6,7 +6,7 @@
   - general feedback here :: https://github.com/deepfire/reflex-glfw/issues/7
 
 * reflex-glfw
-  [[https://api.travis-ci.org/deepfire/reflex-glfw.svg?branch=master]]
+  [[https://travis-ci.org/deepfire/reflex-glfw/][https://api.travis-ci.org/deepfire/reflex-glfw.svg?branch=master]]
 *** What
 
     =reflex-glfw= is an adapter between [[https://github.com/reflex-frp/reflex][Reflex]], a [[http://www.haskell.org/][Haskell]] FRP framework and
