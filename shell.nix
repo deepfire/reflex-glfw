@@ -43,11 +43,13 @@ let
        }) {}));
     };
   });
-  drv = (haskell.lib.addBuildTools
-  (ghc.callPackage (import ./.) { })
-  [ pkgs.cabal-install
-    pkgs.stack
-    ghc.intero
-  ]);
+  drv = ghc.callPackage (import ./.) { };
+  drv'    = haskell.lib.overrideCabal
+            drv
+            (old: {
+              libraryHaskellDepends =
+                old.libraryHaskellDepends
+                ++ [ pkgs.cabal-install pkgs.stack ghc.intero ];
+             });
 in
-  if nixpkgs.lib.inNixShell then drv.env else drv
+  if nixpkgs.lib.inNixShell then drv'.env else drv'
