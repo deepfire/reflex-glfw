@@ -13,11 +13,11 @@ let
     in with new; parent // {
       # aeson      = dontHaddock (dontCheck old.aeson);
       # scientific = dontHaddock (dontCheck old.scientific);
-      reflex     = dontHaddock (dontCheck (new.callPackage
+      reflex = doJailbreak (new.callPackage
       ({ stdenv, mkDerivation, base, containers, data-default, dependent-map, dependent-sum
-       , exception-transformers, haskell-src-exts, haskell-src-meta, hlint
-       , MemoTrie, lens, monad-control, mtl, primitive, prim-uniq, ref-tf, reflection, semigroups, split, syb
-       , template-haskell, these, transformers, transformers-compat
+       , exception-transformers, filemanip, haskell-src-exts, haskell-src-meta, hlint
+       , MemoTrie, lens, monad-control, mtl, primitive, prim-uniq, ref-tf, reflection, semigroups, semigroupoids, split, syb
+       , template-haskell, these, transformers, transformers-compat, unbounded-delays
        }:
        mkDerivation {
            pname = "reflex";
@@ -25,13 +25,13 @@ let
            src = pkgs.fetchFromGitHub {
              owner = "deepfire";
              repo = "reflex";
-             rev = "ca928573e6d1a17fe02de2d89d410db8f24d34e8";
-             sha256 = "1lmgfiz76cv5bh8ri9v7k2djzjd9rmm8lhgw8kd9x7hh9331f15a";
+             rev = "60d2878142943487987feeeea108dbed5405f469";
+             sha256 = "1gzyclfc18k881ww990fydgci3zcszy0rny0p979qdjfv4f50396";
            };
            libraryHaskellDepends = [
-             base containers data-default dependent-map dependent-sum exception-transformers
+             base containers data-default dependent-map dependent-sum exception-transformers filemanip
              haskell-src-exts haskell-src-meta hlint lens MemoTrie monad-control mtl primitive prim-uniq ref-tf reflection
-             semigroups split syb template-haskell these transformers transformers-compat
+             semigroups semigroupoids split syb template-haskell these transformers transformers-compat unbounded-delays
            ];
            testHaskellDepends = [
              base containers dependent-map MemoTrie mtl ref-tf
@@ -40,7 +40,7 @@ let
            description = "Higher-order Functional Reactive Programming";
            license = stdenv.lib.licenses.bsd3;
            hydraPlatforms = stdenv.lib.platforms.none;
-       }) {}));
+       }) {});
     };
   });
   drv = ghc.callPackage (import ./.) { };

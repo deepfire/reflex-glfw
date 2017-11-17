@@ -13,7 +13,6 @@ maintainer:          _deepfire@feelingofgreen.ru
 -- copyright:
 category:            Graphics
 build-type:          Simple
-extra-source-files:  ChangeLog.md
 cabal-version:       >=1.10
 
 tested-with:           GHC == 8.0.2
@@ -49,7 +48,9 @@ library
                      , mtl >=2.2
                      , OpenGLRaw >=3.2
                      , pretty >=1.1
+                     , primitive
                      , reflex >=0.5
+                     , ref-tf
                      , stm >=2.4
                      , transformers >=0.5
 
