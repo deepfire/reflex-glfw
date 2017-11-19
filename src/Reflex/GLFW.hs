@@ -18,10 +18,11 @@ Portability : Unspecified
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE PackageImports #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE UnicodeSyntax #-}
 module Reflex.GLFW
-  ( ReflexGLFW, ReflexGLFWCtx
+  ( ReflexGLFW, ReflexGLFWCtx, ReflexGLFWGuest
   -- * GL window setup
   , tryInit, init
   , gl33ForwardCoreSetup
@@ -58,12 +59,16 @@ import           Prelude                            hiding (Char, init)
 import qualified Prelude                            as Prelude
 import           Prelude.Unicode
 
+import           Control.Concurrent                        (forkIO, threadDelay)
+import           Control.Concurrent.Chan                   (newChan, readChan)
 import qualified Control.Concurrent.STM             as STM (TQueue, atomically, newTQueueIO, tryReadTQueue, writeTQueue)
 import           Control.Lens
-import           Control.Monad                             (unless, forM_)
+import           Control.Monad                             (unless, forever, forM_, forM, void)
 import           Control.Monad.Fix                         (MonadFix)
 import           Control.Monad.Identity                    (Identity(..))
 import           Control.Monad.IO.Class                    (MonadIO, liftIO)
+import           Control.Monad.Primitive                   (PrimMonad)
+import           Control.Monad.Ref                         (MonadRef(..))
 import           Data.Dependent.Sum                        (DSum ((:=>)))
 import           Data.IORef                                (readIORef)
 import           Data.Map
@@ -74,7 +79,9 @@ import qualified "GLFW-b" Graphics.UI.GLFW          as GL
 import qualified System.IO                          as Sys
 
 import           Reflex
-import           Reflex.Host.Class                         (newEventWithTriggerRef)
+import           Reflex.Host.Class
+
+import           Data.Maybe                                (catMaybes)
 
 
 -- | The constructor for Reflex FRP networks runnable by 'Reflex.GLFW' hosts is a
@@ -90,17 +97,34 @@ import           Reflex.Host.Class                         (newEventWithTriggerR
 --     monad, that is interpreted as a request for termination -- shutdown once
 --     'True'.
 --
-type ReflexGLFW t m
-  = ReflexGLFWCtx t m
-  ⇒ GL.Window           -- ^ The GLFW window to draw unto and suck events from
-  → EventCtl            -- ^ An "event control" handler, providing IO actions to
-                        --   mute/unmute events at GLFW level with 'EventType'
-                        --   granularity: see 'setEvent'
-  → Event t ()          -- ^ The initial "setup" event, that arrives just once, at the very first frame.
-  → Event t GL.Window   -- ^ The window to draw on, fired on every frame
-  → Event t InputU      -- ^ Fired whenever input happens, which isn't always the case..
-  → m (Behavior t Bool) -- ^ The monadic-FRP-network-builder to be passed to 'host'
-type ReflexGLFWCtx t m = (Reflex t, MonadHold t m, MonadFix m, MonadIO m, MonadAdjust t m, PerformEvent t m, MonadIO (Performable m))
+type ReflexGLFWCtx t m =
+  ( MonadReflexHost t m
+  , MonadHold t m
+  , Ref m ~ Ref IO
+  , MonadRef (HostFrame t)
+  , Ref (HostFrame t) ~ Ref IO
+  , MonadIO (HostFrame t)
+  , PrimMonad (HostFrame t)
+  , Reflex t
+  , MonadIO m
+  , MonadFix m
+  )
+
+type ReflexGLFW t m a =
+  (ReflexGLFWCtx t m) ⇒ PostBuildT t (TriggerEventT t (PerformEventT t m)) a
+
+type ReflexGLFWGuest t m =
+    (ReflexGLFWCtx   t m)
+  ⇒ GL.Window                    -- ^ The GLFW window to draw unto and suck events from
+  → EventCtl                     -- ^ An "event control" handler, providing IO actions to
+                                 --   mute/unmute events at GLFW level with 'EventType'
+                                 --   granularity: see 'setEvent'
+  → Event t ()                   -- ^ The initial "setup" event, that arrives just once, at the very first frame.
+  → Event t GL.Window            -- ^ The window to draw on, fired on every frame
+  → Event t InputU               -- ^ Fired whenever input happens, which isn't always the case..
+                                 --
+                                 -- → The monadic-FRP-network-builder to be passed to 'host'
+  → ReflexGLFW t m (Behavior t Bool)
 
 
 -- * GLFW error handling
@@ -136,6 +160,7 @@ init = do
   success ← tryInit
   unless success $
     error "GLFW failed to initialise GL."
+  pure ()
 
 -- | Request a forward-compatible OpenGL 3.3 core profile.
 --   Should be called between 'init' / 'tryInit' and 'withGLWindow'.
@@ -151,19 +176,25 @@ gl33ForwardCoreSetup = liftIO $ do
 -- | Call this function after 'init' / 'tryInit', and once the necessary GLFW
 -- window hints are provided (if any were deemed required, that is) either by
 -- 'gl33ForwardCoreSetup' or by direct "GLFW" API calls.
-withGLWindow ∷ (MonadIO m) ⇒ Int → Int → String → (GL.Window → m ()) → m ()
+
+withGLWindow ∷ (MonadIO m) ⇒ Int → Int → String → (GL.Window → m a) → m a
 withGLWindow width height title f = do
     liftIO $ GL.setErrorCallback $ Just simpleErrorPrinter
     m ← liftIO $ GL.createWindow width height title Nothing Nothing
-    case m of
-      Just win → do
-        liftIO $ GL.makeContextCurrent m
-        f win
-        liftIO $ GL.setErrorCallback $ Just simpleErrorPrinter
-        liftIO $ GL.destroyWindow win
-      Nothing →
-        errormsg $ "Failed to create a GL window.  Was 'init' called?  Were the requested window hints (if any) appropriate?"
+    r ← case m of
+          Just win → do
+            liftIO $ GL.makeContextCurrent m
+            r ← f win
+            liftIO $ GL.setErrorCallback $ Just simpleErrorPrinter
+            liftIO $ GL.destroyWindow win
+            pure r
+          Nothing → do
+            let msg = "Failed to create a GL window.  Was 'init' called?  Were the requested window hints (if any) appropriate?"
+            errormsg msg
+            error    msg
+
     liftIO $ GL.terminate
+    pure r
 
 -- | Setup a GLFW window according to a certain notion of "default".
 defaultGLWindowSetup ∷ (MonadIO m) ⇒ GL.Window → m ()
@@ -179,12 +210,12 @@ newtype PointerSample  = PointerSample  { pSample ∷ (Double, Double) }
 pointerSampleZero ∷ PointerSample
 pointerSampleZero = PointerSample (0, 0)
 
-sampleJoystick ∷ ReflexGLFWCtx t m ⇒ GL.Joystick → Event t a → m (Event t JoystickSample)
+sampleJoystick ∷ ReflexGLFWCtx t m ⇒ GL.Joystick → Event t a → ReflexGLFW t m (Event t JoystickSample)
 sampleJoystick js ev = do
   e ← fmapMaybe id <$> (performEvent $ ev <&> (const $ liftIO $ GL.getJoystickAxes js))
   pure $ JoystickSample <$> e
 
-samplePointer ∷ ReflexGLFWCtx t m ⇒ GL.Window → Event t a → m (Event t PointerSample)
+samplePointer ∷ ReflexGLFWCtx t m ⇒ GL.Window → Event t a → ReflexGLFW t m (Event t PointerSample)
 samplePointer win ev = do
   e ← performEvent $ ev <&> (const $ liftIO $ GL.getCursorPos win)
   pure $ PointerSample <$> e
@@ -415,7 +446,7 @@ disableEvent = setEvent False
 
 -- * Input Dynamics
 --
-mouseButtonState ∷ ReflexGLFWCtx t m ⇒ GL.MouseButton → Event t (Input MouseButton) → m (Dynamic t (Maybe (Double, Double)))
+mouseButtonState ∷ ReflexGLFWCtx t m ⇒ GL.MouseButton → Event t (Input MouseButton) → ReflexGLFW t m (Dynamic t (Maybe (Double, Double)))
 mouseButtonState btn inputE = do
   -- XXX/optimise:  maybe 'toggle' is to help us here?
   e ← performEvent $ filterMouseButton' btn inputE <&>
@@ -425,7 +456,7 @@ mouseButtonState btn inputE = do
              else pure Nothing)
   holdDyn Nothing e
 
-keyState ∷ ReflexGLFWCtx t m ⇒ GL.Key → Event t (Input Key) → m (Dynamic t Bool)
+keyState ∷ ReflexGLFWCtx t m ⇒ GL.Key → Event t (Input Key) → ReflexGLFW t m (Dynamic t Bool)
 keyState key inputE =
   -- XXX/optimise:  maybe 'toggle' is to help us here?
   holdDyn False $ (\case EventKey _ _ _ ks _       → keyStateIsPress ks)         <$> filterKey' key inputE
@@ -438,8 +469,8 @@ keyState key inputE =
 --   cleanup at the end.  Like 'withGLWindow', depends on 'init' / 'tryInit' to be
 --   performed beforehand.
 simpleHost ∷ (MonadIO io)
-           ⇒ String                  -- ^ GL window title
-           → (∀ t m. ReflexGLFW t m) -- ^ The user FRP network, aka "guest"
+           ⇒ String              -- ^ GL window title
+           → (∀ t m. ReflexGLFWGuest t m)
            → io ()
 simpleHost title guest =
   withGLWindow 1024 768 title $ \win → do
@@ -448,11 +479,11 @@ simpleHost title guest =
 
 -- | Like 'simpleHost', but also performs 'init' itself.  Note, that this limits
 --   the GL profile to whatever is provided by 'GLFW.defaultWindowHints'.
-basicHost ∷ (MonadIO io) ⇒ String → (∀ t m. ReflexGLFW t m) → io ()
+basicHost ∷ (MonadIO io) ⇒ String → (∀ t m. ReflexGLFWGuest t m) → io ()
 basicHost title guest = init >> simpleHost title guest
 
 -- | Like 'basicHost', but requests a forward-compatible OpenGL 3.3 Core profile.
-basicGL33Host ∷ (MonadIO io) ⇒ String → (∀ t m. ReflexGLFW t m) → io ()
+basicGL33Host ∷ (MonadIO io) ⇒ String → (∀ t m. ReflexGLFWGuest t m) → io ()
 basicGL33Host title guest = init >> gl33ForwardCoreSetup >> simpleHost title guest
 
 -- | A Reflex host runs a program written in the framework.  This will do all the
@@ -461,46 +492,77 @@ basicGL33Host title guest = init >> gl33ForwardCoreSetup >> simpleHost title gue
 host ∷ (MonadIO io)
      ⇒ GL.Window                     -- ^ A GL window to operate on.  One could be
                                      --   made by 'withGLWindow'.
-     → (∀ t m. ReflexGLFW t m)       -- ^ The user FRP network, aka "guest"
+     → (∀ t m. ReflexGLFWGuest t m)  -- ^ The user FRP network, aka "guest"
      → io ()
-host win myGuest = do
+host win guest = do
   ec ← makeEventCtl win
+  events ← liftIO newChan
 
-  -- Use the Spider implementation of Reflex.
+  fireRef ← liftIO $ newRef Nothing
+
+  -- 1. A forked EventTrigger forwarder
+  void . liftIO . forkIO $ do
+    -- Wait for the FireCommand to appear, first:
+    let fireWaitLoop = do
+          mFire ← readRef fireRef
+          case mFire of
+            Nothing   → threadDelay 100000 >> fireWaitLoop
+            Just fire → pure fire
+    FireCommand fire ← fireWaitLoop
+    -- Actual event forwarding:
+    forever $ do
+      ers <- readChan events
+      _ <- runSpiderHost $ do
+        mes <- liftIO $ forM ers $ \(EventTriggerRef er :=> TriggerInvocation a _) -> do
+          me <- readIORef er
+          return $ fmap (\e -> e :=> Identity a) me
+        _ <- fire (catMaybes mes) $ return ()
+        liftIO $ forM_ ers $ \(_ :=> TriggerInvocation _ cb) -> cb
+      pure ()
+    pure ()
+
   liftIO $ runSpiderHost $ do
-    (s, sTriggerRef) ← newEventWithTriggerRef -- Setup
-    (f, fTriggerRef) ← newEventWithTriggerRef -- Frames
-    (i, iTriggerRef) ← newEventWithTriggerRef -- Input
+    -- 2. Build the FRP network and obtain:
+    --    - (non-EventTrigger-ed) event injectors
+    --    - the termination token
+    ((b, postBuildTriggerRef, frameriggerRef, inputTriggerRef), fc@(FireCommand fire)) <- hostPerformEventT $ do
+      (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
+      (frame,     frameriggerRef)      <- newEventWithTriggerRef
+      (input,     inputTriggerRef)     <- newEventWithTriggerRef
+      b <- runTriggerEventT (runPostBuildT (guest win ec postBuild frame input) postBuild) events
+      pure ( b
+           , postBuildTriggerRef, frameriggerRef, inputTriggerRef)
+    mPostBuildTrigger <- readRef postBuildTriggerRef
+    forM_ mPostBuildTrigger $ \postBuildTrigger -> fire [postBuildTrigger :=> Identity ()] $ return ()
 
-    (b, FireCommand threadedFire) ← hostPerformEventT $ myGuest win ec s f i
-    mTrig ← liftIO $ readIORef sTriggerRef
-    case mTrig of
-      Nothing   → pure ()
-      Just trig → (>> pure ()) $ threadedFire [trig :=> Identity ()] $ pure ()
+    -- 3. Start up the EventTrigger event forwarder:
+    writeRef fireRef $ Just fc
 
+    -- 4. Keep feeding frame and input events:
     let loop ∷ SpiderHost Global ()
         loop = do
           (stopRequest, FireCommand _) ← hostPerformEventT $ sample b
 
-          mTrig' ← liftIO $ readIORef fTriggerRef
+          mTrig' ← liftIO $ readIORef frameriggerRef
           case mTrig' of
             Nothing   → pure [()]
             Just trig →
-              threadedFire [trig :=> Identity win] $ pure ()
+              fire [trig :=> Identity win] $ pure ()
 
           let inputInnerLoop = do
                 mInput ← readInput ec
                 case mInput of
                   Nothing → pure ()
                   Just input → do
-                    mTrig'' ← liftIO $ readIORef iTriggerRef
+                    mTrig'' ← liftIO $ readIORef inputTriggerRef
                     case mTrig'' of
                       Nothing → pure [()]
-                      Just trig → threadedFire [trig :=> Identity input] $ pure ()
+                      Just trig → fire [trig :=> Identity input] $ pure ()
                     inputInnerLoop
           inputInnerLoop
 
           unless stopRequest $
             loop
-    -- Begin our event processing loop.
     loop
+
+  pure ()
