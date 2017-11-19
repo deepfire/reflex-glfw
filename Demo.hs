@@ -80,7 +80,7 @@ guestInit win = do
           }
     pure env
 
-updateView ∷ ReflexGLFWCtx t m ⇒ Event t (Double, GLFW.Window) → m (Event t ())
+updateView ∷ ReflexGLFWCtx t m ⇒ Event t (Double, GLFW.Window) → ReflexGLFW t m (Event t ())
 updateView newFrameE = performEvent $ newFrameE <&>
   \(zDist, win) → do
     (width, height) ← liftIO $ GLFW.getFramebufferSize win
@@ -105,7 +105,7 @@ updateView newFrameE = performEvent $ newFrameE <&>
         GL.loadIdentity
         GL.translate (GL.Vector3 0 0 (negate $ realToFrac zDist) ∷ GL.Vector3 GL.GLfloat)
 
-draw ∷ ReflexGLFWCtx t m ⇒ Env → Event t ((Double, Double, Double), Double) → m (Event t ())
+draw ∷ ReflexGLFWCtx t m ⇒ Env → Event t ((Double, Double, Double), Double) → ReflexGLFW t m (Event t ())
 draw Env{..} statE = performEvent $ statE <&>
   \((xa, ya, za), ga) → do
     let gear1 = envGear1
@@ -137,7 +137,7 @@ draw Env{..} statE = performEvent $ statE <&>
         yunit = GL.Vector3 0 1 0 ∷ GL.Vector3 GL.GLfloat
         zunit = GL.Vector3 0 0 1 ∷ GL.Vector3 GL.GLfloat
 
-nextFrame ∷ ReflexGLFWCtx t m ⇒ GLFW.Window → Event t () → m (Event t ())
+nextFrame ∷ ReflexGLFWCtx t m ⇒ GLFW.Window → Event t () → ReflexGLFW t m (Event t ())
 nextFrame win windowFrameE = performEvent $ windowFrameE <&>
   \_ → liftIO $ do
     GLFW.swapBuffers win
@@ -152,7 +152,7 @@ demoGuest ∷ ReflexGLFWCtx t m
           → Event t ()          -- ^ The initial "setup" event, that arrives just once, at the very first frame.
           → Event t GLFW.Window -- ^ The window to draw on, fired on every frame.
           → Event t InputU      -- ^ Fired whenever input happens, which isn't always the case..
-          → m (Behavior t Bool)
+          → ReflexGLFW t m (Behavior t Bool)
 demoGuest win _ec setupE windowFrameE inputE = do
   liftIO $ Sys.hSetBuffering Sys.stdout Sys.NoBuffering
   env@Env{..} ← guestInit win
@@ -263,7 +263,7 @@ main = do
       putStrLn "ended!"
 
 
-processEvent ∷ ReflexGLFWCtx t m ⇒ Event t InputU → m (Event t ())
+processEvent ∷ ReflexGLFWCtx t m ⇒ Event t InputU → ReflexGLFW t m (Event t ())
 processEvent inputE = performEvent $ inputE <&>
   \case
     U (EventError e s) → liftIO $ do
@@ -299,7 +299,7 @@ processEvent inputE = performEvent $ inputE <&>
     U (EventChar _ c) →
         printEvent "char" [show c]
 
-arrowKeyDirections ∷ ReflexGLFWCtx t m ⇒ Event t (Input Key) → m (Dynamic t (Double, Double))
+arrowKeyDirections ∷ ReflexGLFWCtx t m ⇒ Event t (Input Key) → ReflexGLFW t m (Dynamic t (Double, Double))
 arrowKeyDirections inputE = do
   x0 ← (bool 0 (-1) <$>) <$> keyState GLFW.Key'Up    inputE
   x1 ← (bool 0  (1) <$>) <$> keyState GLFW.Key'Down  inputE
@@ -309,7 +309,7 @@ arrowKeyDirections inputE = do
       y = zipDynWith (+) y0 y1
   pure $ zipDynWith (,) x y
 
-joystickDirections ∷ ReflexGLFWCtx t m ⇒ Event t JoystickSample → m (Dynamic t (Double, Double))
+joystickDirections ∷ ReflexGLFWCtx t m ⇒ Event t JoystickSample → ReflexGLFW t m (Dynamic t (Double, Double))
 joystickDirections jsE =
   holdDyn (0, 0) =<< (performEvent $ jsE <&>
                        \(JoystickSample (x:y:_)) → pure (-y, x))
