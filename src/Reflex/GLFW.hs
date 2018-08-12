@@ -293,8 +293,8 @@ data Input (k ∷ EventType) where
   EventWindowSize      ∷ !GL.Window → !Int → !Int                                                → Input WindowSize
   EventWindowClose     ∷ !GL.Window                                                              → Input WindowClose
   EventWindowRefresh   ∷ !GL.Window                                                              → Input WindowRefresh
-  EventWindowFocus     ∷ !GL.Window → !GL.FocusState                                             → Input WindowFocus
-  EventWindowIconify   ∷ !GL.Window → !GL.IconifyState                                           → Input WindowIconify
+  EventWindowFocus     ∷ !GL.Window → !Bool                                                      → Input WindowFocus
+  EventWindowIconify   ∷ !GL.Window → !Bool                                                      → Input WindowIconify
   EventFramebufferSize ∷ !GL.Window → !Int → !Int                                                → Input FramebufferSize
   EventMouseButton     ∷ !GL.Window → !GL.MouseButton → !GL.MouseButtonState → !GL.ModifierKeys  → Input MouseButton
   EventCursorPos       ∷ !GL.Window → !Double → !Double                                          → Input CursorPos
@@ -309,8 +309,8 @@ windowPosCallback       ∷ STM.TQueue InputU → GL.Window → Int → Int     
 windowSizeCallback      ∷ STM.TQueue InputU → GL.Window → Int → Int                                                → IO ()
 windowCloseCallback     ∷ STM.TQueue InputU → GL.Window                                                            → IO ()
 windowRefreshCallback   ∷ STM.TQueue InputU → GL.Window                                                            → IO ()
-windowFocusCallback     ∷ STM.TQueue InputU → GL.Window → GL.FocusState                                            → IO ()
-windowIconifyCallback   ∷ STM.TQueue InputU → GL.Window → GL.IconifyState                                          → IO ()
+windowFocusCallback     ∷ STM.TQueue InputU → GL.Window → Bool                                                     → IO ()
+windowIconifyCallback   ∷ STM.TQueue InputU → GL.Window → Bool                                                     → IO ()
 framebufferSizeCallback ∷ STM.TQueue InputU → GL.Window → Int → Int                                                → IO ()
 mouseButtonCallback     ∷ STM.TQueue InputU → GL.Window → GL.MouseButton   → GL.MouseButtonState → GL.ModifierKeys → IO ()
 cursorPosCallback       ∷ STM.TQueue InputU → GL.Window → Double → Double                                          → IO ()
