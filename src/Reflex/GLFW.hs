@@ -106,6 +106,7 @@ type ReflexGLFWCtx t m =
   , MonadIO (HostFrame t)
   , PrimMonad (HostFrame t)
   , Reflex t
+  , MonadRef m
   , MonadIO m
   , MonadFix m
   )
