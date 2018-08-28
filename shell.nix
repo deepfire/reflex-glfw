@@ -25,16 +25,15 @@ let
            src = pkgs.fetchFromGitHub {
              owner = "deepfire";
              repo = "reflex";
-             rev = "60d2878142943487987feeeea108dbed5405f469";
-             sha256 = "1gzyclfc18k881ww990fydgci3zcszy0rny0p979qdjfv4f50396";
+             rev    = "39d9392b191ec85052eb8839f6c9f207f9e21885";
+             sha256 = "07rzrapnalzvl24nc9vgbzah8qpwqkd2v90ijzchwhlgk9y82lfb";
            };
+           doCheck         = false;
+           jailbreak       = true;
            libraryHaskellDepends = [
              base containers data-default dependent-map dependent-sum exception-transformers filemanip
-             haskell-src-exts haskell-src-meta hlint lens MemoTrie monad-control mtl primitive prim-uniq ref-tf reflection
+             haskell-src-exts haskell-src-meta hlint lens MemoTrie monad-control monoidal-containers mtl primitive prim-uniq ref-tf reflection
              semigroups semigroupoids split syb template-haskell these transformers transformers-compat unbounded-delays
-           ];
-           testHaskellDepends = [
-             base containers dependent-map MemoTrie mtl ref-tf
            ];
            homepage = "https://github.com/reflex-frp/reflex";
            description = "Higher-order Functional Reactive Programming";
