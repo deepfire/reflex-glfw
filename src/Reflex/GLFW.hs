@@ -120,7 +120,6 @@ type ReflexGLFWGuest t m =
   → EventCtl                     -- ^ An "event control" handler, providing IO actions to
                                  --   mute/unmute events at GLFW level with 'EventType'
                                  --   granularity: see 'setEvent'
-  → Event t ()                   -- ^ The initial "setup" event, that arrives just once, at the very first frame.
   → Event t GL.Window            -- ^ The window to draw on, fired on every frame
   → Event t InputU               -- ^ Fired whenever input happens, which isn't always the case..
                                  --
@@ -530,7 +529,7 @@ host win guest = do
       (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
       (frame,     frameriggerRef)      <- newEventWithTriggerRef
       (input,     inputTriggerRef)     <- newEventWithTriggerRef
-      b <- runTriggerEventT (runPostBuildT (guest win ec postBuild frame input) postBuild) events
+      b <- runTriggerEventT (runPostBuildT (guest win ec frame input) postBuild) events
       pure ( b
            , postBuildTriggerRef, frameriggerRef, inputTriggerRef)
     mPostBuildTrigger <- readRef postBuildTriggerRef
