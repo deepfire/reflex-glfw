@@ -20,6 +20,7 @@ Portability : Unspecified
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE StrictData #-}
 {-# LANGUAGE UnicodeSyntax #-}
 module Reflex.GLFW
   ( ReflexGLFW, ReflexGLFWCtx, ReflexGLFWGuest
@@ -71,7 +72,8 @@ import           Control.Monad.Primitive                   (PrimMonad)
 import           Control.Monad.Ref                         (MonadRef(..))
 import           Data.Dependent.Sum                        (DSum ((:=>)))
 import           Data.IORef                                (readIORef)
-import           Data.Map
+import qualified Data.Map                           as Map
+import           Data.Map                                  (Map)
 import           Data.Maybe
 
 import qualified Graphics.GL.Core33                 as GL
@@ -239,6 +241,45 @@ scrollY (EventScroll _ _ y) = y
 
 -- * Input Events
 --
+-- | The type describing deliverable GLFW events.
+data EventType
+  = Error
+  | WindowPos
+  | WindowSize
+  | WindowClose
+  | WindowRefresh
+  | WindowFocus
+  | WindowIconify
+  | FramebufferSize
+  | MouseButton
+  | CursorPos
+  | CursorEnter
+  | Scroll
+  | Key
+  | Char
+  deriving (Eq, Ord)
+
+data InputU where
+  U ∷ Input k → InputU
+deriving instance Show InputU
+
+data Input (k ∷ EventType) where
+  EventError           ∷ GL.Error  → String                                                 → Input Error
+  EventWindowPos       ∷ GL.Window → Int → Int                                              → Input WindowPos
+  EventWindowSize      ∷ GL.Window → Int → Int                                              → Input WindowSize
+  EventWindowClose     ∷ GL.Window                                                          → Input WindowClose
+  EventWindowRefresh   ∷ GL.Window                                                          → Input WindowRefresh
+  EventWindowFocus     ∷ GL.Window → Bool                                                   → Input WindowFocus
+  EventWindowIconify   ∷ GL.Window → Bool                                                   → Input WindowIconify
+  EventFramebufferSize ∷ GL.Window → Int → Int                                              → Input FramebufferSize
+  EventMouseButton     ∷ GL.Window → GL.MouseButton → GL.MouseButtonState → GL.ModifierKeys → Input MouseButton
+  EventCursorPos       ∷ GL.Window → Double → Double                                        → Input CursorPos
+  EventCursorEnter     ∷ GL.Window → GL.CursorState                                         → Input CursorEnter
+  EventScroll          ∷ GL.Window → Double → Double                                        → Input Scroll
+  EventKey             ∷ GL.Window → GL.Key → Int → GL.KeyState → GL.ModifierKeys           → Input Key
+  EventChar            ∷ GL.Window → Prelude.Char                                           → Input Char
+deriving instance Show (Input k)
+
 filterError           ∷ Reflex t ⇒ Event t InputU → Event t (Input Error)
 filterWindowRefresh   ∷ Reflex t ⇒ Event t InputU → Event t (Input WindowRefresh)
 filterFramebufferSize ∷ Reflex t ⇒ Event t InputU → Event t (Input FramebufferSize)
@@ -264,45 +305,6 @@ filterMouseButtonStateChange btn state = ffilter (\case EventMouseButton _ k st 
 filterKey', filterKeyPress       ∷ Reflex t   ⇒ GL.Key         → Event t (Input Key)         → Event t (Input Key)
 filterKey'     key = ffilter (\case EventKey _ k _ _  _ → k ≡ key)
 filterKeyPress key = ffilter (\case EventKey _ k _ ks _ → k ≡ key ∧ keyStateIsPress ks)
-
--- | The type describing deliverable GLFW events.
-data EventType
-  = Error
-  | WindowPos
-  | WindowSize
-  | WindowClose
-  | WindowRefresh
-  | WindowFocus
-  | WindowIconify
-  | FramebufferSize
-  | MouseButton
-  | CursorPos
-  | CursorEnter
-  | Scroll
-  | Key
-  | Char
-  deriving (Eq, Ord)
-
-data InputU where
-  U ∷ Input k → InputU
-deriving instance Show InputU
-
-data Input (k ∷ EventType) where
-  EventError           ∷ !GL.Error  → !String                                                    → Input Error
-  EventWindowPos       ∷ !GL.Window → !Int → !Int                                                → Input WindowPos
-  EventWindowSize      ∷ !GL.Window → !Int → !Int                                                → Input WindowSize
-  EventWindowClose     ∷ !GL.Window                                                              → Input WindowClose
-  EventWindowRefresh   ∷ !GL.Window                                                              → Input WindowRefresh
-  EventWindowFocus     ∷ !GL.Window → !Bool                                                      → Input WindowFocus
-  EventWindowIconify   ∷ !GL.Window → !Bool                                                      → Input WindowIconify
-  EventFramebufferSize ∷ !GL.Window → !Int → !Int                                                → Input FramebufferSize
-  EventMouseButton     ∷ !GL.Window → !GL.MouseButton → !GL.MouseButtonState → !GL.ModifierKeys  → Input MouseButton
-  EventCursorPos       ∷ !GL.Window → !Double → !Double                                          → Input CursorPos
-  EventCursorEnter     ∷ !GL.Window → !GL.CursorState                                            → Input CursorEnter
-  EventScroll          ∷ !GL.Window → !Double → !Double                                          → Input Scroll
-  EventKey             ∷ !GL.Window → !GL.Key → !Int → !GL.KeyState → !GL.ModifierKeys           → Input Key
-  EventChar            ∷ !GL.Window → !Prelude.Char                                              → Input Char
-deriving instance Show (Input k)
 
 errorCallback           ∷ STM.TQueue InputU → GL.Error → String                                                    → IO ()
 windowPosCallback       ∷ STM.TQueue InputU → GL.Window → Int → Int                                                → IO ()
@@ -415,7 +417,7 @@ defaultEnabledEvents =
 eventControlMap ∷ MonadIO m ⇒ Map EventType
                                   (STM.TQueue InputU → GL.Window → m ()
                                   ,                    GL.Window → m ())
-eventControlMap = fromList
+eventControlMap = Map.fromList
   [(Error,           (enableErrorEvents,           disableErrorEvents))
   ,(WindowPos,       (enableWindowPosEvents,       disableWindowPosEvents))
   ,(WindowSize,      (enableWindowSizeEvents,      disableWindowSizeEvents))
@@ -434,9 +436,9 @@ eventControlMap = fromList
 -- | Control firing of events of 'EventType'.
 setEvent ∷ Bool → EventCtl → EventType → IO ()
 setEvent True  (EventCtl (win, iq)) evType =
-  (fst ∘ fromJust $ Data.Map.lookup evType eventControlMap) iq win
+  (fst ∘ fromJust $ Map.lookup evType eventControlMap) iq win
 setEvent False (EventCtl (win,  _)) evType =
-  (snd ∘ fromJust $ Data.Map.lookup evType eventControlMap)    win
+  (snd ∘ fromJust $ Map.lookup evType eventControlMap)    win
 
 -- | Specialised versions of 'setEvent'.
 enableEvent, disableEvent ∷ EventCtl → EventType → IO ()
