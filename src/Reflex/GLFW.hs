@@ -83,7 +83,7 @@ import qualified System.IO                          as Sys
 import           Reflex
 import           Reflex.Host.Class
 
-import           Data.Maybe                                (catMaybes)
+import           Reflex.GLFW.Instances
 
 
 -- | The constructor for Reflex FRP networks runnable by 'Reflex.GLFW' hosts is a
