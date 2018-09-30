@@ -18,6 +18,7 @@ Portability : Unspecified
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE PackageImports #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE StrictData #-}
@@ -36,6 +37,10 @@ module Reflex.GLFW
   , scrollX, scrollY
   -- * Input Events
   , EventType(..), Input(..), InputU(..)
+  , EventMask(..), ButtonEventMask(..), KeyEventMask(..)
+  , eventType, eventUType, eventMatch, eventMaskKeys, eventMaskButtons, eventMaskChars
+  , eventTypeMaskTest, eventMaskTypes
+  , mappendModifierKeys, subsetModifierKeys
   , EventCtl, setEvent, enableEvent, disableEvent
   , filterError
   , filterWindowRefresh
@@ -72,9 +77,12 @@ import           Control.Monad.Primitive                   (PrimMonad)
 import           Control.Monad.Ref                         (MonadRef(..))
 import           Data.Dependent.Sum                        (DSum ((:=>)))
 import           Data.IORef                                (readIORef)
+import           Data.List                                 (intercalate)
 import qualified Data.Map                           as Map
 import           Data.Map                                  (Map)
 import           Data.Maybe
+import qualified Data.Set                           as Set
+import           Data.Set                                  (Set)
 
 import qualified Graphics.GL.Core33                 as GL
 import qualified "GLFW-b" Graphics.UI.GLFW          as GL
@@ -257,7 +265,7 @@ data EventType
   | Scroll
   | Key
   | Char
-  deriving (Eq, Ord)
+  deriving (Bounded, Enum, Eq, Ord, Show)
 
 data InputU where
   U ∷ Input k → InputU
@@ -279,6 +287,162 @@ data Input (k ∷ EventType) where
   EventKey             ∷ GL.Window → GL.Key → Int → GL.KeyState → GL.ModifierKeys           → Input Key
   EventChar            ∷ GL.Window → Prelude.Char                                           → Input Char
 deriving instance Show (Input k)
+
+eventType ∷ Input u → EventType
+eventType = \case
+  EventError{}           → Error
+  EventWindowPos{}       → WindowPos
+  EventWindowSize{}      → WindowSize
+  EventWindowClose{}     → WindowClose
+  EventWindowRefresh{}   → WindowRefresh
+  EventWindowFocus{}     → WindowFocus
+  EventWindowIconify{}   → WindowIconify
+  EventFramebufferSize{} → FramebufferSize
+  EventMouseButton{}     → MouseButton
+  EventCursorPos{}       → CursorPos
+  EventCursorEnter{}     → CursorEnter
+  EventScroll{}          → Scroll
+  EventKey{}             → Key
+  EventChar{}            → Char
+
+eventUType ∷ InputU → EventType
+eventUType (U i) = eventType i
+
+data EventMask where
+  EventMask ∷
+    { emError           ∷ Bool
+    , emWindowPos       ∷ Bool
+    , emWindowSize      ∷ Bool
+    , emWindowClose     ∷ Bool
+    , emWindowRefresh   ∷ Bool
+    , emWindowFocus     ∷ Bool
+    , emWindowIconify   ∷ Bool
+    , emFramebufferSize ∷ Bool
+    , emMouseButton     ∷ Maybe ButtonEventMask
+    , emCursorPos       ∷ Bool
+    , emCursorEnter     ∷ Bool
+    , emScroll          ∷ Bool
+    , emKey             ∷ Maybe KeyEventMask
+    , emChar            ∷ Bool
+    } → EventMask
+  deriving (Eq, Ord)
+instance Show EventMask where
+  show EventMask{..} = ("(EventMask"<>) ∘ (<>")") $ concat $
+    [" Error"           | emError]           <>
+    [" WindowPos"       | emWindowPos]       <>
+    [" WindowSize"      | emWindowSize]      <>
+    [" WindowClose"     | emWindowClose]     <>
+    [" WindowRefresh"   | emWindowRefresh]   <>
+    [" WindowFocus"     | emWindowFocus]     <>
+    [" WindowIconify"   | emWindowIconify]   <>
+    [" FramebufferSize" | emFramebufferSize] <>
+    maybe [] ((:[]) ∘ (" "<>) ∘ show) emMouseButton <>
+    [" CursorPos"       | emCursorPos]       <>
+    [" CursorEnter"     | emCursorEnter]     <>
+    maybe [] ((:[]) ∘ (" "<>) ∘ show) emKey  <>
+    [" Char"            | emChar]
+
+instance Semigroup EventMask where
+  EventMask e wp ws wc we wf wi fs mb cp ce s k c <> EventMask e' wp' ws' wc' we' wf' wi' fs' mb' cp' ce' s' k' c' =
+    EventMask (e∨e') (wp∨wp') (ws∨ws') (wc∨wc') (we∨we') (wf∨wf') (wi∨wi') (fs∨fs') (mb<>mb') (cp∨cp') (ce∨ce') (s∨s') (k<>k') (c∨c')
+instance Monoid    EventMask where
+  mempty = EventMask False False False False False False False False Nothing False False False Nothing False
+
+eventMaskKeys       ∷ KeyEventMask    → EventMask
+eventMaskKeys    ks = EventMask False False False False False False False False Nothing   False False False (Just ks) False
+
+eventMaskChars      ∷ EventMask
+eventMaskChars      = EventMask False False False False False False False False Nothing   False False False Nothing   True
+
+eventMaskButtons    ∷ ButtonEventMask → EventMask
+eventMaskButtons bs = EventMask False False False False False False False False (Just bs) False False False Nothing   False
+
+eventTypeMaskTest ∷ EventMask → EventType → Bool
+eventTypeMaskTest EventMask{..} = \case
+  Error           → emError
+  WindowPos       → emWindowPos
+  WindowSize      → emWindowSize
+  WindowClose     → emWindowClose
+  WindowRefresh   → emWindowRefresh
+  WindowFocus     → emWindowFocus
+  WindowIconify   → emWindowIconify
+  FramebufferSize → emFramebufferSize
+  MouseButton     → isJust emMouseButton
+  CursorPos       → emCursorPos
+  CursorEnter     → emCursorEnter
+  Scroll          → emScroll
+  Key             → isJust emKey
+  Char            → emChar
+
+eventMaskTypes ∷ EventMask → [EventType]
+eventMaskTypes = flip filter (enumFromTo minBound maxBound) ∘ eventTypeMaskTest
+
+data ButtonEventMask where
+  ButtonEventMask ∷
+    { emButtons         ∷ Set GL.MouseButton
+    , emButtonStates    ∷ Set GL.MouseButtonState
+    , emButtonModifiers ∷ GL.ModifierKeys
+    } → ButtonEventMask
+  deriving (Eq, Ord)
+instance Show ButtonEventMask where
+  show (ButtonEventMask btns states mods) = ("(Mouse "<>) ∘ (<>")") $
+    (intercalate "+" $ drop 5  ∘ show <$> Set.toList btns)   <> " " <>
+    (intercalate "+" $ drop 18 ∘ show <$> Set.toList states) <> " " <>
+    showModifierKeys mods
+
+subsetModifierKeys ∷ GL.ModifierKeys → GL.ModifierKeys → Bool
+subsetModifierKeys (GL.ModifierKeys a b c d) (GL.ModifierKeys a' b' c' d') =
+  (not a ∨ a') ∧ (not b ∨ b') ∧ (not c ∨ c') ∧ (not d ∨ d')
+
+showModifierKeys ∷ GL.ModifierKeys → String
+showModifierKeys (GL.ModifierKeys shift ctrl alt super) = ("(Modif"<>) ∘ (<>")") $
+    concat $ [" SHIFT" | shift] <> [" CTRL" | ctrl] <> [" ALT" | alt] <> [" SUPER" | super]
+
+instance Semigroup ButtonEventMask where
+  ButtonEventMask a c e <> ButtonEventMask b d f = ButtonEventMask (a <> b) (c <> d) (e <> f)
+instance Monoid    ButtonEventMask where
+  mempty = ButtonEventMask mempty mempty mempty
+
+data KeyEventMask where
+  KeyEventMask ∷
+    { emKeys            ∷ Set GL.Key
+    , emKeyStates       ∷ Set GL.KeyState
+    , emKeyModifiers    ∷ GL.ModifierKeys
+    } → KeyEventMask
+  deriving (Eq, Ord)
+instance Show KeyEventMask where
+  show (KeyEventMask btns states mods) = ("(Key "<>) ∘ (<>")") $
+    (intercalate "+" $ drop 4 ∘ show <$> Set.toList btns)   <> " " <>
+    (intercalate "+" $ drop 9 ∘ show <$> Set.toList states) <> " " <>
+    showModifierKeys mods
+
+instance Semigroup KeyEventMask where
+  KeyEventMask a c e <> KeyEventMask b d f = KeyEventMask (a <> b) (c <> d) (e <> f)
+instance Monoid    KeyEventMask where
+  mempty = KeyEventMask mempty mempty mempty
+
+eventMatch ∷ EventMask → Input k → Bool
+eventMatch EventMask{..} = \case
+  EventCursorPos{}         → emCursorPos
+  EventScroll{}            → emScroll
+  EventChar{}              → emChar
+  EventKey         _ key _ state mods
+                           → case emKey of
+                               Just KeyEventMask{..}    → key `Set.member` emKeys ∧ state `Set.member` emKeyStates ∧ (mods `subsetModifierKeys` emKeyModifiers)
+                               Nothing → False
+  EventMouseButton _ button state mods
+                           → case emMouseButton of
+                               Just ButtonEventMask{..} → button `Set.member` emButtons ∧ state `Set.member` emButtonStates ∧ (mods `subsetModifierKeys` emButtonModifiers)
+                               Nothing → False
+  EventWindowRefresh{}     → emWindowRefresh
+  EventFramebufferSize{}   → emFramebufferSize
+  EventWindowSize{}        → emWindowSize
+  EventCursorEnter{}       → emCursorEnter
+  EventWindowPos{}         → emWindowPos
+  EventWindowClose{}       → emWindowClose
+  EventWindowFocus{}       → emWindowFocus
+  EventWindowIconify{}     → emWindowIconify
+  EventError{}             → emError
 
 filterError           ∷ Reflex t ⇒ Event t InputU → Event t (Input Error)
 filterWindowRefresh   ∷ Reflex t ⇒ Event t InputU → Event t (Input WindowRefresh)
