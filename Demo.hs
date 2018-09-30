@@ -149,11 +149,10 @@ newtype PointerDrag = PointerDrag ((Double, Double), (Double, Double))
 demoGuest ∷ ReflexGLFWCtx t m
           ⇒ GLFW.Window
           → EventCtl
-          → Event t ()          -- ^ The initial "setup" event, that arrives just once, at the very first frame.
           → Event t GLFW.Window -- ^ The window to draw on, fired on every frame.
           → Event t InputU      -- ^ Fired whenever input happens, which isn't always the case..
           → ReflexGLFW t m (Behavior t Bool)
-demoGuest win _ec setupE windowFrameE inputE = do
+demoGuest win _ec windowFrameE inputE = do
   liftIO $ Sys.hSetBuffering Sys.stdout Sys.NoBuffering
   env@Env{..} ← guestInit win
   printInstructions
