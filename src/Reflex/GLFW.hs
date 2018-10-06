@@ -24,7 +24,7 @@ Portability : Unspecified
 {-# LANGUAGE StrictData #-}
 {-# LANGUAGE UnicodeSyntax #-}
 module Reflex.GLFW
-  ( ReflexGLFW, ReflexGLFWCtx, ReflexGLFWGuest
+  ( ReflexGLFW, ReflexGLFWCtx, ReflexGLFWM, ReflexGLFWGuest
   -- * GL window setup
   , tryInit, init
   , gl33ForwardCoreSetup
@@ -121,8 +121,10 @@ type ReflexGLFWCtx t m =
   , MonadFix m
   )
 
-type ReflexGLFW t m a =
-  (ReflexGLFWCtx t m) ⇒ PostBuildT t (TriggerEventT t (PerformEventT t m)) a
+type ReflexGLFWM   t m   = PostBuildT t (TriggerEventT t (PerformEventT t m))
+
+type ReflexGLFW    t m a =
+     ReflexGLFWCtx t m   ⇒ PostBuildT t (TriggerEventT t (PerformEventT t m)) a
 
 type ReflexGLFWGuest t m =
     (ReflexGLFWCtx   t m)
