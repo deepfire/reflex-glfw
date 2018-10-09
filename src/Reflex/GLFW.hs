@@ -83,6 +83,7 @@ import           Data.Map                                  (Map)
 import           Data.Maybe
 import qualified Data.Set                           as Set
 import           Data.Set                                  (Set)
+import           Data.Typeable
 
 import qualified Graphics.GL.Core33                 as GL
 import qualified "GLFW-b" Graphics.UI.GLFW          as GL
@@ -119,6 +120,7 @@ type ReflexGLFWCtx t m =
   , MonadRef m
   , MonadIO m
   , MonadFix m
+  , Typeable m
   )
 
 type ReflexGLFWM   t m   = PostBuildT t (TriggerEventT t (PerformEventT t m))
