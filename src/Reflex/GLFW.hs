@@ -61,6 +61,7 @@ module Reflex.GLFW
 where
 
 import           GHC.Stack
+import           GHC.Types                                 (Type)
 import           Prelude                            hiding (Char, init)
 import qualified Prelude                            as Prelude
 import           Prelude.Unicode
@@ -123,7 +124,7 @@ type ReflexGLFWCtx t m =
   , Typeable m
   )
 
-type ReflexGLFWM   t m   = PostBuildT t (TriggerEventT t (PerformEventT t m))
+type ReflexGLFWM   t (m ∷ Type → Type) = (PostBuildT t (TriggerEventT t (PerformEventT t m)))
 
 type ReflexGLFW    t m a =
      ReflexGLFWCtx t m   ⇒ PostBuildT t (TriggerEventT t (PerformEventT t m)) a

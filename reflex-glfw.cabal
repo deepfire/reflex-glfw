@@ -45,6 +45,7 @@ library
                      , containers
                      , dependent-sum >=0.3
                      , GLFW-b >=1.4
+                     , ghc-prim
                      , lens >=4
                      , mtl >=2.2
                      , OpenGLRaw >=3.2
