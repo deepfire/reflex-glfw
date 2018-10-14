@@ -1,6 +1,6 @@
 { mkDerivation, base, base-unicode-symbols, containers
-, dependent-sum, ghc-prim, GLFW-b, lens, mtl, OpenGL, OpenGLRaw, pretty
-, primitive, ref-tf, reflex, stdenv, stm, transformers
+, dependent-sum, ghc-prim, GLFW-b, lens, mtl, OpenGL, OpenGLRaw
+, pretty, primitive, ref-tf, reflex, stdenv, stm, transformers
 }:
 mkDerivation {
   pname = "reflex-glfw";
@@ -9,11 +9,11 @@ mkDerivation {
   isLibrary = true;
   isExecutable = true;
   libraryHaskellDepends = [
-    base base-unicode-symbols containers dependent-sum ghc-prim GLFW-b lens mtl
-    OpenGLRaw pretty primitive ref-tf reflex stm transformers
+    base base-unicode-symbols containers dependent-sum ghc-prim GLFW-b
+    lens mtl OpenGLRaw pretty primitive ref-tf reflex stm transformers
   ];
   executableHaskellDepends = [
-    base base-unicode-symbols containers dependent-sum ghc-prim GLFW-b lens mtl
+    base base-unicode-symbols containers dependent-sum GLFW-b lens mtl
     OpenGL OpenGLRaw pretty reflex stm transformers
   ];
   homepage = "https://github.com/deepfire/reflex-glfw/";
