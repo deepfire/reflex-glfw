@@ -9,22 +9,26 @@ Portability : Unspecified
 
 -}
 {-# OPTIONS_GHC -Wall -Wno-unused-do-bind -Wno-unused-top-binds -Wno-unticked-promoted-constructors #-}
+{-# OPTIONS_GHC -Wno-unused-imports #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PackageImports #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE StrictData #-}
+{-# LANGUAGE TypeInType #-}
 {-# LANGUAGE UnicodeSyntax #-}
 module Reflex.GLFW
-  ( ReflexGLFW, ReflexGLFWCtx, ReflexGLFWM, ReflexGLFWGuest
+  ( RGLFW, RGLFWGuest
   -- * GL window setup
   , tryInit, init
   , gl33ForwardCoreSetup
@@ -62,6 +66,7 @@ where
 
 import           GHC.Stack
 import           GHC.Types                                 (Type)
+import           GHC.IORef                                 (IORef)
 import           Prelude                            hiding (Char, init)
 import qualified Prelude                            as Prelude
 import           Prelude.Unicode
@@ -74,7 +79,7 @@ import           Control.Monad                             (unless, forever, for
 import           Control.Monad.Fix                         (MonadFix)
 import           Control.Monad.Identity                    (Identity(..))
 import           Control.Monad.IO.Class                    (MonadIO, liftIO)
-import           Control.Monad.Primitive                   (PrimMonad)
+-- import           Control.Monad.Primitive                   (PrimMonad)
 import           Control.Monad.Ref                         (MonadRef(..))
 import           Data.Dependent.Sum                        (DSum ((:=>)))
 import           Data.IORef                                (readIORef)
@@ -109,28 +114,53 @@ import           Reflex.GLFW.Instances
 --     monad, that is interpreted as a request for termination -- shutdown once
 --     'True'.
 --
-type ReflexGLFWCtx t m =
-  ( MonadReflexHost t m
-  , MonadHold t m
-  , Ref m ~ Ref IO
-  , MonadRef (HostFrame t)
-  , Ref (HostFrame t) ~ Ref IO
-  , MonadIO (HostFrame t)
-  , PrimMonad (HostFrame t)
-  , Reflex t
-  , MonadRef m
-  , MonadIO m
-  , MonadFix m
-  , Typeable m
-  )
+type RGLFW t m
+  = ( MonadFix m
+    , MonadHold t m
+    --
+    , PostBuild t m
+    --
+    , MonadIO m
+    , PerformEvent t m
+    , Ref m ~ Ref IO
+    , MonadIO (Performable m)
+    --
+    , Typeable t
+    )
 
-type ReflexGLFWM   t (m ∷ Type → Type) = (PostBuildT t (TriggerEventT t (PerformEventT t m)))
+-- Reflex/Host/Class.hs:
+-- class ( Reflex t
+--       , MonadReflexCreateTrigger t (HostFrame t)
+--       , MonadSample t (HostFrame t)
+--       , MonadHold t (HostFrame t)
+--       , MonadFix (HostFrame t)
+--       , MonadSubscribeEvent t (HostFrame t)
+--       ) => ReflexHost t where
+--   type EventTrigger t :: * -> *
+--   type EventHandle t :: * -> *
+--   type HostFrame t :: * -> *
+-- class ( ReflexHost t
+--       , MonadReflexCreateTrigger t m
+--       , MonadSubscribeEvent t m
+--       , MonadReadEvent t (ReadPhase m)
+--       , MonadSample t (ReadPhase m)
+--       , MonadHold t (ReadPhase m)
+--       ) => MonadReflexHost t m | m -> t where
+--   runHostFrame :: HostFrame t a -> m a
+-- hostPerformEventT :: forall t m a.
+--                      ( Monad m
+--                      , MonadSubscribeEvent t m
+--                      , MonadReflexHost t m
+--                      , MonadRef m
+--                      , Ref m ~ Ref IO
+--                      )
+--                   => PerformEventT t m a
+--                   -> m (a, FireCommand t m)
+-- instance (ReflexHost t, Ref m ~ Ref IO) => PerformEvent t (PerformEventT t m) where
+--   type Performable (PerformEventT t m) = HostFrame t
 
-type ReflexGLFW    t m a =
-     ReflexGLFWCtx t m   ⇒ PostBuildT t (TriggerEventT t (PerformEventT t m)) a
-
-type ReflexGLFWGuest t m =
-    (ReflexGLFWCtx   t m)
+type RGLFWGuest t m
+  =  RGLFW   t m
   ⇒ GL.Window                    -- ^ The GLFW window to draw unto and suck events from
   → EventCtl                     -- ^ An "event control" handler, providing IO actions to
                                  --   mute/unmute events at GLFW level with 'EventType'
@@ -139,7 +169,7 @@ type ReflexGLFWGuest t m =
   → Event t InputU               -- ^ Fired whenever input happens, which isn't always the case..
                                  --
                                  -- → The monadic-FRP-network-builder to be passed to 'host'
-  → ReflexGLFW t m (Behavior t Bool)
+  → m (Behavior t Bool)
 
 
 -- * GLFW error handling
@@ -225,12 +255,14 @@ newtype PointerSample  = PointerSample  { pSample ∷ (Double, Double) }
 pointerSampleZero ∷ PointerSample
 pointerSampleZero = PointerSample (0, 0)
 
-sampleJoystick ∷ ReflexGLFWCtx t m ⇒ GL.Joystick → Event t a → ReflexGLFW t m (Event t JoystickSample)
+sampleJoystick ∷ RGLFW t m
+               ⇒ GL.Joystick → Event t a → m (Event t JoystickSample)
 sampleJoystick js ev = do
-  e ← fmapMaybe id <$> (performEvent $ ev <&> (const $ liftIO $ GL.getJoystickAxes js))
+  e ← fmapMaybe id <$> (performEvent $ (ev <&> (const $ liftIO $ GL.getJoystickAxes js)))
   pure $ JoystickSample <$> e
 
-samplePointer ∷ ReflexGLFWCtx t m ⇒ GL.Window → Event t a → ReflexGLFW t m (Event t PointerSample)
+samplePointer ∷ RGLFW t m
+              ⇒ GL.Window → Event t a → m (Event t PointerSample)
 samplePointer win ev = do
   e ← performEvent $ ev <&> (const $ liftIO $ GL.getCursorPos win)
   pure $ PointerSample <$> e
@@ -241,8 +273,8 @@ keyStateIsPress GL.KeyState'Repeating = True
 keyStateIsPress _                     = False
 
 mouseButtonStateIsPress ∷ GL.MouseButtonState → Bool
-mouseButtonStateIsPress GL.MouseButtonState'Pressed = True
-mouseButtonStateIsPress _                           = False
+mouseButtonStateIsPress   GL.MouseButtonState'Pressed = True
+mouseButtonStateIsPress _                             = False
 
 cursorPosCoords ∷ Input CursorPos → (Double, Double)
 cursorPosCoords (EventCursorPos _ x y) = (x, y)
@@ -617,7 +649,9 @@ disableEvent = setEvent False
 
 -- * Input Dynamics
 --
-mouseButtonState ∷ ReflexGLFWCtx t m ⇒ GL.MouseButton → Event t (Input MouseButton) → ReflexGLFW t m (Dynamic t (Maybe (Double, Double)))
+mouseButtonState ∷ RGLFW t m
+                 ⇒ GL.MouseButton → Event t (Input MouseButton)
+                 → m (Dynamic t (Maybe (Double, Double)))
 mouseButtonState btn inputE = do
   -- XXX/optimise:  maybe 'toggle' is to help us here?
   e ← performEvent $ filterMouseButton' btn inputE <&>
@@ -627,7 +661,9 @@ mouseButtonState btn inputE = do
              else pure Nothing)
   holdDyn Nothing e
 
-keyState ∷ ReflexGLFWCtx t m ⇒ GL.Key → Event t (Input Key) → ReflexGLFW t m (Dynamic t Bool)
+keyState ∷ RGLFW t m
+         ⇒ GL.Key → Event t (Input Key)
+         → m (Dynamic t Bool)
 keyState key inputE =
   -- XXX/optimise:  maybe 'toggle' is to help us here?
   holdDyn False $ (\case EventKey _ _ _ ks _       → keyStateIsPress ks)         <$> filterKey' key inputE
@@ -639,9 +675,10 @@ keyState key inputE =
 --   'defaultGLWindowSetup' on it and yields to the guest.  Performs no extra
 --   cleanup at the end.  Like 'withGLWindow', depends on 'init' / 'tryInit' to be
 --   performed beforehand.
-simpleHost ∷ (MonadIO io)
-           ⇒ String              -- ^ GL window title
-           → (∀ t m. ReflexGLFWGuest t m)
+simpleHost ∷ MonadIO io
+           ⇒ String               -- ^ GL window title
+           → (∀ t m. RGLFW t m ⇒
+               RGLFWGuest t m)      -- ^ The user FRP network constructor, aka "guest"
            → io ()
 simpleHost title guest =
   withGLWindow 1024 768 title $ \win → do
@@ -650,20 +687,20 @@ simpleHost title guest =
 
 -- | Like 'simpleHost', but also performs 'init' itself.  Note, that this limits
 --   the GL profile to whatever is provided by 'GLFW.defaultWindowHints'.
-basicHost ∷ (MonadIO io) ⇒ String → (∀ t m. ReflexGLFWGuest t m) → io ()
+basicHost ∷ (MonadIO io) ⇒ String → (∀ t m. RGLFW t m ⇒ RGLFWGuest t m) → io ()
 basicHost title guest = init >> simpleHost title guest
 
 -- | Like 'basicHost', but requests a forward-compatible OpenGL 3.3 Core profile.
-basicGL33Host ∷ (MonadIO io) ⇒ String → (∀ t m. ReflexGLFWGuest t m) → io ()
+basicGL33Host ∷ (MonadIO io) ⇒ String → (∀ t m. RGLFW t m ⇒ RGLFWGuest t m) → io ()
 basicGL33Host title guest = init >> gl33ForwardCoreSetup >> simpleHost title guest
 
 -- | A Reflex host runs a program written in the framework.  This will do all the
 --   necessary work to integrate the Reflex-based guest program with the outside
 --   world via IO.
 host ∷ (MonadIO io)
-     ⇒ GL.Window                     -- ^ A GL window to operate on.  One could be
-                                     --   made by 'withGLWindow'.
-     → (∀ t m. ReflexGLFWGuest t m)  -- ^ The user FRP network, aka "guest"
+     ⇒ GL.Window              -- ^ A GL window to operate on.  One could be made by 'withGLWindow'.
+     → (∀ t m. RGLFW t m ⇒
+        RGLFWGuest t m)       -- ^ The user FRP network constructor, aka "guest"
      → io ()
 host win guest = do
   ec ← makeEventCtl win
