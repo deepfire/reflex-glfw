@@ -8,7 +8,7 @@ Stability   : experimental
 Portability : Unspecified
 
 -}
-{-# OPTIONS_GHC -Wall -Wno-unused-do-bind -Wno-unused-top-binds -Wno-unticked-promoted-constructors #-}
+{-# OPTIONS_GHC -Wall -Wno-unused-do-bind -Wno-unticked-promoted-constructors #-}
 {-# OPTIONS_GHC -Wno-unused-imports #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
@@ -42,7 +42,21 @@ module Reflex.GLFW
   -- * Input Events
   , EventType(..), Input(..), InputU(..)
   , EventMask(..), ButtonEventMask(..), KeyEventMask(..)
-  , eventType, eventUType, eventMatch, eventMaskKeys, eventMaskButtons, eventMaskChars
+  , eventType, eventUType, eventMatch
+  , eventMaskButtons
+  , eventMaskChars
+  , eventMaskCursorEnter
+  , eventMaskCursorPos
+  , eventMaskError
+  , eventMaskFramebufferSize
+  , eventMaskKeys
+  , eventMaskScroll
+  , eventMaskWindowClose
+  , eventMaskWindowFocus
+  , eventMaskWindowIconify
+  , eventMaskWindowPos
+  , eventMaskWindowRefresh
+  , eventMaskWindowSize
   , eventTypeMaskTest, eventMaskTypes
   , mappendModifierKeys, subsetModifierKeys
   , EventCtl, setEvent, enableEvent, disableEvent
@@ -385,14 +399,47 @@ instance Semigroup EventMask where
 instance Monoid    EventMask where
   mempty = EventMask False False False False False False False False Nothing False False False Nothing False
 
-eventMaskKeys       ∷ KeyEventMask    → EventMask
-eventMaskKeys    ks = EventMask False False False False False False False False Nothing   False False False (Just ks) False
+eventMaskError           ∷ EventMask
+eventMaskError           = EventMask True  False False False False False False False Nothing   False False False Nothing   False
 
-eventMaskChars      ∷ EventMask
-eventMaskChars      = EventMask False False False False False False False False Nothing   False False False Nothing   True
+eventMaskWindowPos       ∷ EventMask
+eventMaskWindowPos       = EventMask False True  False False False False False False Nothing   False False False Nothing   False
 
-eventMaskButtons    ∷ ButtonEventMask → EventMask
-eventMaskButtons bs = EventMask False False False False False False False False (Just bs) False False False Nothing   False
+eventMaskWindowSize      ∷ EventMask
+eventMaskWindowSize      = EventMask False False True  False False False False False Nothing   False False False Nothing   False
+
+eventMaskWindowClose     ∷ EventMask
+eventMaskWindowClose     = EventMask False False False True  False False False False Nothing   False False False Nothing   False
+
+eventMaskWindowRefresh   ∷ EventMask
+eventMaskWindowRefresh   = EventMask False False False False True  False False False Nothing   False False False Nothing   False
+
+eventMaskWindowFocus     ∷ EventMask
+eventMaskWindowFocus     = EventMask False False False False False True  False False Nothing   False False False Nothing   False
+
+eventMaskWindowIconify   ∷ EventMask
+eventMaskWindowIconify   = EventMask False False False False False False True  False Nothing   False False False Nothing   False
+
+eventMaskFramebufferSize ∷ EventMask
+eventMaskFramebufferSize = EventMask False False False False False False False True  Nothing   False False False Nothing   False
+
+eventMaskButtons         ∷ ButtonEventMask → EventMask
+eventMaskButtons      bs = EventMask False False False False False False False False (Just bs) False False False Nothing   False
+
+eventMaskCursorPos       ∷ EventMask
+eventMaskCursorPos       = EventMask False False False False False False False False Nothing   True  False False Nothing   False
+
+eventMaskCursorEnter     ∷ EventMask
+eventMaskCursorEnter     = EventMask False False False False False False False False Nothing   False True  False Nothing   False
+
+eventMaskScroll          ∷ EventMask
+eventMaskScroll          = EventMask False False False False False False False False Nothing   False False True  Nothing   False
+
+eventMaskKeys            ∷ KeyEventMask    → EventMask
+eventMaskKeys         ks = EventMask False False False False False False False False Nothing   False False False (Just ks) False
+
+eventMaskChars           ∷ EventMask
+eventMaskChars           = EventMask False False False False False False False False Nothing   False False False Nothing   True
 
 eventTypeMaskTest ∷ EventMask → EventType → Bool
 eventTypeMaskTest EventMask{..} = \case
