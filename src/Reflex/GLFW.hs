@@ -43,7 +43,7 @@ module Reflex.GLFW
   -- * Input Events
   , EventType(..), Input(..), InputU(..)
   , EventMask(..), ButtonEventMask(..), KeyEventMask(..)
-  , eventType, eventUType, eventMatch
+  , eventType, eventUType, eventMatch, matchButtonEventMask, matchKeyEventMask
   , eventMaskButtons
   , eventMaskChars
   , eventMaskCursorEnter
@@ -506,18 +506,26 @@ instance Semigroup KeyEventMask where
 instance Monoid    KeyEventMask where
   mempty = KeyEventMask mempty mempty mempty
 
+matchButtonEventMask ∷ ButtonEventMask → Input MouseButton → Bool
+matchButtonEventMask ButtonEventMask{..} (EventMouseButton _ button state mods)
+  = button `Set.member` emButtons ∧ state `Set.member` emButtonStates ∧ (mods `subsetModifierKeys` emButtonModifiers)
+{-# INLINABLE matchButtonEventMask #-}
+
+matchKeyEventMask    ∷ KeyEventMask    → Input Key         → Bool
+matchKeyEventMask    KeyEventMask{..}    (EventKey         _ key _  state mods)
+  = key `Set.member` emKeys ∧ state `Set.member` emKeyStates ∧ (mods `subsetModifierKeys` emKeyModifiers)
+{-# INLINABLE matchKeyEventMask #-}
+
 eventMatch ∷ EventMask → Input k → Bool
 eventMatch EventMask{..} = \case
   EventCursorPos{}         → emCursorPos
   EventScroll{}            → emScroll
   EventChar{}              → emChar
-  EventKey         _ key _ state mods
-                           → case emKey of
-                               Just KeyEventMask{..}    → key `Set.member` emKeys ∧ state `Set.member` emKeyStates ∧ (mods `subsetModifierKeys` emKeyModifiers)
+  ev@EventKey{}            → case emKey of
+                               Just em → matchKeyEventMask    em ev
                                Nothing → False
-  EventMouseButton _ button state mods
-                           → case emMouseButton of
-                               Just ButtonEventMask{..} → button `Set.member` emButtons ∧ state `Set.member` emButtonStates ∧ (mods `subsetModifierKeys` emButtonModifiers)
+  ev@EventMouseButton{}    → case emMouseButton of
+                               Just em → matchButtonEventMask em ev
                                Nothing → False
   EventWindowRefresh{}     → emWindowRefresh
   EventFramebufferSize{}   → emFramebufferSize
