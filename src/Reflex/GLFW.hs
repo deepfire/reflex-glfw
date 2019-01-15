@@ -8,6 +8,7 @@ Stability   : experimental
 Portability : Unspecified
 
 -}
+{-# OPTIONS_GHC -funbox-strict-fields #-}
 {-# OPTIONS_GHC -Wall -Wno-unused-do-bind -Wno-unticked-promoted-constructors #-}
 {-# OPTIONS_GHC -Wno-unused-imports #-}
 {-# LANGUAGE ConstraintKinds #-}
@@ -361,20 +362,20 @@ eventUType (U i) = eventType i
 
 data EventMask where
   EventMask ∷
-    { emError           ∷ Bool
-    , emWindowPos       ∷ Bool
-    , emWindowSize      ∷ Bool
-    , emWindowClose     ∷ Bool
-    , emWindowRefresh   ∷ Bool
-    , emWindowFocus     ∷ Bool
-    , emWindowIconify   ∷ Bool
-    , emFramebufferSize ∷ Bool
-    , emMouseButton     ∷ Maybe ButtonEventMask
-    , emCursorPos       ∷ Bool
-    , emCursorEnter     ∷ Bool
-    , emScroll          ∷ Bool
-    , emKey             ∷ Maybe KeyEventMask
-    , emChar            ∷ Bool
+    { emError           ∷ !Bool
+    , emWindowPos       ∷ !Bool
+    , emWindowSize      ∷ !Bool
+    , emWindowClose     ∷ !Bool
+    , emWindowRefresh   ∷ !Bool
+    , emWindowFocus     ∷ !Bool
+    , emWindowIconify   ∷ !Bool
+    , emFramebufferSize ∷ !Bool
+    , emMouseButton     ∷ !(Maybe ButtonEventMask)
+    , emCursorPos       ∷ !Bool
+    , emCursorEnter     ∷ !Bool
+    , emScroll          ∷ !Bool
+    , emKey             ∷ !(Maybe KeyEventMask)
+    , emChar            ∷ !Bool
     } → EventMask
   deriving (Eq, Ord)
 instance Show EventMask where
