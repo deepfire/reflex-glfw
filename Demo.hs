@@ -283,7 +283,7 @@ processEvent inputE = performEvent $ inputE <&>
     U (EventFramebufferSize _ width height) → do
         printEvent "framebuffer size" [show width, show height]
     U (EventMouseButton _ mb mbs mk) → do
-        printEvent "mouse button" [show mb, show mbs, showModifierKeys mk]
+        printEvent "mouse button" [show mb, show mbs, Main.showModifierKeys mk]
     U (EventCursorPos _ x y) → do
         let x' = round x ∷ Int
             y' = round y ∷ Int
@@ -295,7 +295,7 @@ processEvent inputE = performEvent $ inputE <&>
             y' = round y ∷ Int
         printEvent "scroll" [show x', show y']
     U (EventKey win k scancode ks mk) → do
-        printEvent "key" [show k, show scancode, show ks, showModifierKeys mk]
+        printEvent "key" [show k, show scancode, show ks, Main.showModifierKeys mk]
     U (EventChar _ c) →
         printEvent "char" [show c]
 

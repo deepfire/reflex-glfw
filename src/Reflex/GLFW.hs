@@ -59,7 +59,7 @@ module Reflex.GLFW
   , eventMaskWindowRefresh
   , eventMaskWindowSize
   , eventTypeMaskTest, eventMaskTypes
-  , mappendModifierKeys, subsetModifierKeys
+  , mappendModifierKeys, subsetModifierKeys, showModifierKeys
   , EventCtl, setEvent, enableEvent, disableEvent
   , filterError
   , filterWindowRefresh
